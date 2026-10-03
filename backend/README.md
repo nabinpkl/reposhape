@@ -6,13 +6,13 @@ runs on your machine, and opens the map in your browser.
 
 ![LangChain's monorepo as a map: folders as circles, files as dots sized by line count](https://raw.githubusercontent.com/nabinpkl/reposhape/main/docs/images/langchain-map-lines.jpg)
 
-*LangChain, 1,766 source files with tests hidden. Each circle is a folder and
+*The **map · lines** view of LangChain, 1,766 source files with tests hidden. Each circle is a folder and
 each dot is a file, sized by its line count. Colours are clusters worked out
 from the imports.*
 
 ![The same map with the imports that cross between packages drawn on top](https://raw.githubusercontent.com/nabinpkl/reposhape/main/docs/images/langchain-map-edges.jpg)
 
-*The same repo with the imports that cross from one package to another drawn
+*The **map · edges** view: the same repo with the imports that cross from one package to another drawn
 on top.*
 
 ## Install
