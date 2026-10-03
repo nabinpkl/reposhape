@@ -57,8 +57,8 @@ gitignored, never here.
 
 Bump `version` in `backend/pyproject.toml`, commit, tag `vX.Y.Z`, push the
 tag; `.github/workflows/release.yml` builds, smoke-tests, attests and
-uploads through trusted publishing. A manual run of that workflow publishes
-the same build to TestPyPI. Nothing is ever uploaded from a laptop, and no
+uploads through trusted publishing. A manual run of that workflow is a dry
+run that builds and smoke-tests without uploading. Nothing is ever uploaded from a laptop, and no
 PyPI token exists to leak. `just package-smoke` is the local rehearsal: it
 builds `dist/` and installs each distribution the way a user would, on the
 newest dependencies and on pyproject's floors.

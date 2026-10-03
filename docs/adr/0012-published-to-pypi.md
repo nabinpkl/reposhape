@@ -20,13 +20,13 @@ verified, only when the upload came from one.
 
 **Uploads come from `.github/workflows/release.yml` through trusted
 publishing**, never from a laptop and never with a stored token. A version
-tag (`v0.1.0`) publishes to PyPI; a manual run publishes the same build to
-TestPyPI. The build job runs the gate and the package smoke test and keeps
-the distributions; a separate publish job, the only one allowed an identity
-token, attests them (`astral-sh/attest-action`) and uploads them
-(`uv publish`). Each publish job names a GitHub environment, `pypi` or
-`testpypi`, which the trusted publisher registered on that index must match.
-The build refuses a tag that disagrees with `backend/pyproject.toml`, because
+tag (`v0.1.0`) publishes to PyPI; a manual run is a dry run that builds and
+smoke-tests without uploading. The build job runs the gate and the package
+smoke test and keeps the distributions; a separate publish job, the only one
+allowed an identity token, attests them (`astral-sh/attest-action`) and
+uploads them (`uv publish`). The publish job names the GitHub environment
+`pypi`, which the trusted publisher registered on PyPI must match and which
+only accepts deployments from `v*` tags. The build refuses a tag that disagrees with `backend/pyproject.toml`, because
 an index never accepts the same version twice.
 
 **The wheel is the whole tool.** It carries the static export
@@ -61,9 +61,11 @@ Windows with one sentence rather than failing on `signal.SIGKILL` later.
 - A release is: bump `version` in `backend/pyproject.toml`, commit, tag
   `vX.Y.Z`, push the tag. Nothing is uploaded by hand.
 - Before the first upload, a pending trusted publisher must be registered on
-  PyPI and on TestPyPI for `nabinpkl/reposhape`, workflow `release.yml`,
-  environments `pypi` and `testpypi`. The first upload creates the project
-  and claims the name.
+  PyPI for `nabinpkl/reposhape`, workflow `release.yml`, environment `pypi`.
+  The first upload creates the project and claims the name.
+- No TestPyPI rehearsal: the smoke test already installs the exact files
+  that get uploaded, every check runs before the upload step, and PyPI
+  refuses a misconfigured trusted publisher before anything is published.
 - A new shiki language means a new entry in the generator's grammar origins.
 - Raising the uvicorn cap or the Python cap is a `just package-smoke` run on
   the new version, then the edit.

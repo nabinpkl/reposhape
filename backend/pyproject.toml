@@ -84,14 +84,6 @@ artifacts = ["src/reposhape/web/**"]
 # hatch_build.py: refuses a wheel or sdist with no page in it.
 [tool.hatch.build.hooks.custom]
 
-# `uv publish --index testpypi`, from the release workflow's manual run.
-# Explicit, so nothing ever resolves from it.
-[[tool.uv.index]]
-name = "testpypi"
-url = "https://test.pypi.org/simple/"
-publish-url = "https://test.pypi.org/legacy/"
-explicit = true
-
 [tool.ruff]
 line-length = 100
 

@@ -1,15 +1,16 @@
 # Publishing to PyPI (ADR-0012).
 #
-# A version tag (`v0.1.0`) publishes to PyPI; a manual run publishes the same
-# build to TestPyPI. Both upload through trusted publishing, so no token
-# exists anywhere, and with PEP 740 attestations, so each file on PyPI names
-# this repository, this workflow and the commit that built it.
+# A version tag (`v0.1.0`) publishes to PyPI through trusted publishing, so no
+# token exists anywhere, and with PEP 740 attestations, so each file on PyPI
+# names this repository, this workflow and the commit that built it. A manual
+# run is a dry run: it builds and smoke-tests the distributions and uploads
+# nothing.
 #
 # Build and publish are separate jobs: the build runs the project's own code
 # and its dependencies' build steps, and only the publish job, which runs
-# nothing but the upload, may request an identity token. Each publish job
-# names a GitHub environment, which must match the trusted publisher
-# registered on PyPI (`pypi`) or TestPyPI (`testpypi`).
+# nothing but the upload, may request an identity token. That job names the
+# GitHub environment `pypi`, which the trusted publisher registered on PyPI
+# must match, and which only accepts deployments from `v*` tags.
 name: release
 
 on:
@@ -82,40 +83,6 @@ jobs:
           name: dist
           path: dist/
           if-no-files-found: error
-
-  testpypi:
-    if: github.event_name == 'workflow_dispatch'
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/project/reposhape/
-    permissions:
-      id-token: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          enable-cache: false
-
-      - name: Fetch the distributions
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: dist
-          path: dist/
-
-      - name: Attest
-        uses: astral-sh/attest-action@f589a42a7efb6fe400b4f400de60b4bc90390027 # v0.0.6
-
-      # The checkout is only for the `testpypi` index in backend/pyproject.toml.
-      - name: Publish to TestPyPI
-        working-directory: backend
-        run: uv publish --index testpypi --trusted-publishing always ../dist/*
 
   pypi:
     if: github.event_name == 'push'
