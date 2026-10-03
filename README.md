@@ -1,94 +1,143 @@
 # reposhape
 
-See the shape of a repository at a glance. Point it at a repo and get the
-file-level import graph of *your* code, with vendored and generated trees
-scoped out and clusters computed over import edges only. No LLM, no external
-analyser, nothing leaves your machine.
+reposhape draws a map of a codebase: every file, the folder it sits in, and
+which files import which. It reads TypeScript, JavaScript, Vue and Python,
+runs on your machine, and opens the map in your browser.
 
-TypeScript, JavaScript (including Vue single-file components) and Python are
-parsed with tree-sitter; each import is resolved to a real file in the repo or
-recorded with the reason it could not be.
+![LangChain's monorepo as a map: folders as circles, files as dots sized by line count](docs/images/langchain-map-lines.jpg)
+
+*LangChain, 1,766 source files with tests hidden. Each circle is a folder and
+each dot is a file, sized by its line count. Colours are clusters worked out
+from the imports.*
+
+![The same map with the imports that cross between packages drawn on top](docs/images/langchain-map-edges.jpg)
+
+*The same repo with the imports that cross from one package to another drawn
+on top. 1,296 of its 3,642 imports leave their package.*
 
 ## Install
 
-Python 3.14, macOS or Linux:
+You need Python 3.14 on macOS or Linux.
 
 ```bash
-uv tool install reposhape    # or: pipx install reposhape
+uv tool install reposhape
 ```
 
-`uvx reposhape up` runs it without installing.
+`pipx install reposhape` works too. To try it once without installing
+anything, run `uvx reposhape up`.
 
-## Use
+## Quick start
 
 ```bash
-cd path/to/a/repo && reposhape up .   # analyse this repo, open its graph
-reposhape up                          # from anywhere: open the repo picker
-reposhape up https://github.com/owner/repo   # clone it, keep it, open it
+cd path/to/your/repo
+reposhape up .
 ```
+
+This analyses the repo, starts a small local server and opens the map:
 
 ```
   repo  /home/you/code/my-app  (1,259 files, 3,247 edges)
   open  http://127.0.0.1:7420/?repo=my-app-ee3643bb40cb
 ```
 
-`reposhape up .` analyses the repo you are standing in (the git root, not the
-subdirectory), reuses a cached analysis unless you pass `--refresh`, makes sure
-the server is running, and opens the URL. Bare `reposhape up` opens the page on
-the picker, where a folder or a git URL is added. Either way it returns: the
-server keeps running in the background after the terminal closes,
-`reposhape status` says where, and `reposhape down` stops it. An upgrade is
-picked up by the next `reposhape up`, which replaces a server running an older
-build.
+The server keeps running after you close the terminal. `reposhape down`
+stops it.
 
-The server listens on 127.0.0.1 only, and refuses requests that arrive under
-another host name or from another site, so a web page you have open cannot
+For a repo you don't have locally, pass its URL:
+
+```bash
+reposhape up https://github.com/langchain-ai/langchain
+```
+
+## Views
+
+The tabs at the top are different drawings of the same analysis.
+
+- **ours**: a force-directed graph. Files are nodes, imports are lines.
+- **map**: files packed into their folders, one dot per file.
+- **map · lines**: the same, with each dot sized by line count.
+- **map · edges**: the map with the imports between packages drawn on top.
+
+The sidebar filters by tests, file type and folder. The search box highlights
+matching files. The graphify tabs show the same repo as
+[graphify](https://pypi.org/project/graphifyy/) sees it, if you have it
+installed.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `reposhape up .` | Analyse the current repo and open its map |
+| `reposhape up <url>` | Clone a repo, analyse it and open its map |
+| `reposhape up` | Open the page on the repo picker |
+| `reposhape up . --refresh` | Re-analyse instead of using the cached result |
+| `reposhape status` | Show whether the server is running, and where |
+| `reposhape down` | Stop the server |
+| `reposhape repos` | List the repos you have analysed |
+| `reposhape forget <path>` | Remove a repo's analysis (its files are left alone) |
+
+`reposhape <command> --help` has the details.
+
+## Choosing what counts as your code
+
+Anything your `.gitignore` skips, reposhape skips too. To hide more, like
+vendored libraries or generated code, add a `.reposhapeignore` file to the
+repo. It uses the same syntax as `.gitignore`. There's a starting point in
+[`.reposhapeignore.example`](.reposhapeignore.example).
+
+## Where it keeps things
+
+- **Analyses** are cached in `~/.cache/reposhape`.
+- **Cloned repos** go to `~/.local/share/reposhape/clones/<host>/<owner>/<name>`.
+  They are shallow clones and stay until you delete them.
+  `REPOSHAPE_CLONE_ROOT` moves them.
+- **Settings** come from `REPOSHAPE_*` environment variables. A `.env` file
+  inside the repo being analysed is never read.
+
+## Privacy
+
+Your code is parsed locally with tree-sitter. No LLM and no outside service
+is involved.
+
+The server only listens on 127.0.0.1. It also rejects requests that come from
+another host name or another website, so a page open in your browser can't
 read your files through it.
 
-A repo that is not on this machine yet is cloned first: `reposhape clone <url>`,
-`reposhape up <url>`, or **Add repo** in the browser. The checkout is durable,
-not temporary. It lands in `~/.local/share/reposhape/clones` as
-`<host>/<owner>/<name>` (`REPOSHAPE_CLONE_ROOT` moves it) and stays there:
-`reposhape forget` clears the analysis, never the checkout. Clones are shallow;
-`git fetch --unshallow` in one if you want its history.
+## Upgrading
 
-Scope is a decision, not a statistic: copy
-[`.reposhapeignore.example`](.reposhapeignore.example) into the repo you are
-analysing as `.reposhapeignore` and edit it. It is gitignore syntax, merged on
-top of the repo's `.gitignore`.
+```bash
+uv tool upgrade reposhape
+```
 
-Analyses are cached in `~/.cache/reposhape`; settings come from `REPOSHAPE_*`
-environment variables, never from a `.env` in the repo being analysed.
+The next `reposhape up` notices the server is on the old version and restarts
+it.
 
 ## Hosting a read-only copy
 
-`REPOSHAPE_READ_ONLY=true` serves the repos an operator cloned there and
-nothing else: the routes that browse, clone, analyse or forget are never
-registered. The `Dockerfile` and `compose.release.yaml` build and run that
-image; `just release` deploys it to a host over SSH, configured by
-`ops/deployments/hosted.env` (copy `hosted.env.example`). See ADR-0008.
+Set `REPOSHAPE_READ_ONLY=true` to serve a fixed set of repos to other people.
+In this mode nobody can browse folders, clone, analyse or forget. The
+`Dockerfile` and `compose.release.yaml` build and run that setup, and
+`just release` deploys it over SSH using `ops/deployments/hosted.env` (copy
+it from `hosted.env.example`). [ADR-0008](docs/adr/0008-one-artifact-two-deliveries.md)
+has the details.
 
-## Develop
+## Development
 
-Needs uv, pnpm and [just](https://github.com/casey/just).
+You need uv, pnpm and [just](https://github.com/casey/just).
 
 ```bash
-just install       # build the page, put `reposhape` on PATH from this checkout
-just check         # lint, types, tests, contracts, the static export
-just web           # frontend dev server with hot reload, proxying /api to `just serve`
+just install       # build the page and put `reposhape` on PATH from this checkout
+just check         # lint, types, tests, contracts and the static export
+just web           # frontend dev server with hot reload
 just web-export    # rebuild the page the Python package serves
-just package-smoke # build the wheel and sdist, install each and drive it
+just package-smoke # build the wheel and sdist, install each and try it
 ```
 
-The page is a static export built into the Python package, so there is no Node
-at run time. In a checkout, `reposhape up` warns when that copy is older than
-`frontend/src`.
+The frontend is a static export bundled into the Python package, so nothing
+needs Node at run time.
 
-The CLI writes the analysis; the server only reads it. One analysis path, so
-`reposhape analyze-repo` and `POST /api/analyze` cannot drift.
-
-What it is and why it exists: [`PRD.md`](PRD.md). How it is built:
-[`SPEC.md`](SPEC.md). Decisions: [`docs/adr/`](docs/adr/).
+[`PRD.md`](PRD.md) explains what reposhape is for, [`SPEC.md`](SPEC.md) how
+it is built, and [`docs/adr/`](docs/adr/) the decisions behind it.
 
 ## License
 
