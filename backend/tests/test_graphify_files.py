@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,14 @@ from fastapi.testclient import TestClient
 from reposhape import graphify_files
 from reposhape.api import app
 from reposhape.graphify_files import GraphifyFilesError
+
+# These drive graphify's own `export html`, so they need the binary. Without
+# it a contributor's run skips them by name; CI installs it, and under CI a
+# missing binary fails them instead, so a broken install cannot pass quietly.
+needs_graphify = pytest.mark.skipif(
+    shutil.which("graphify") is None and not os.environ.get("CI"),
+    reason="graphify is not installed (uv tool install graphifyy==0.9.57)",
+)
 
 
 @pytest.fixture
@@ -53,13 +63,14 @@ def test_a_bad_key_is_rejected(tmp_path: Path):
         graphify_files.workdir("../escape")
 
 
+@needs_graphify
 def test_files_status_reports_the_binary(client: TestClient, analysed: str):
     body = client.get(f"/api/graphify-files-status/{analysed}").json()
-    # The binary exists wherever this suite runs; the shape is the assertion.
     assert set(body) == {"ready", "reason"}
     assert body["ready"] is True
 
 
+@needs_graphify
 def test_files_page_builds_through_graphifys_exporter(client: TestClient, analysed: str):
     response = client.get(f"/api/graphify-files/{analysed}")
     assert response.status_code == 200
@@ -71,6 +82,7 @@ def test_files_page_builds_through_graphifys_exporter(client: TestClient, analys
     assert "web/src/main.ts" in response.text
 
 
+@needs_graphify
 def test_second_serve_reuses_the_built_page(client: TestClient, analysed: str):
     first = client.get(f"/api/graphify-files/{analysed}")
     assert first.status_code == 200
@@ -109,6 +121,7 @@ def _stats(body: str) -> str:
     return body[start : body.index("</div>", start)]
 
 
+@needs_graphify
 def test_default_shape_hides_tests_like_ours(client: TestClient, analysed: str):
     body = client.get(f"/api/graphify-files/{analysed}").text
     ids, pairs = _embedded_ids(body)
@@ -121,12 +134,14 @@ def test_default_shape_hides_tests_like_ours(client: TestClient, analysed: str):
     assert communities_n >= 1
 
 
+@needs_graphify
 def test_include_tests_shows_the_test_file(client: TestClient, analysed: str):
     body = client.get(f"/api/graphify-files/{analysed}?include_tests=true").text
     ids, _ = _embedded_ids(body)
     assert "web/src/main.test.ts" in ids
 
 
+@needs_graphify
 def test_excluding_type_only_drops_the_type_edge(client: TestClient, analysed: str):
     full = client.get(f"/api/graphify-files/{analysed}").text
     _, full_pairs = _embedded_ids(full)
@@ -139,6 +154,7 @@ def test_excluding_type_only_drops_the_type_edge(client: TestClient, analysed: s
     assert ("web/src/main.ts", "web/src/lib/helper.ts") in pairs
 
 
+@needs_graphify
 def test_exclude_path_and_extension_trim_nodes_and_edges(client: TestClient, analysed: str):
     body = client.get(f"/api/graphify-files/{analysed}?exclude=web/src").text
     ids, pairs = _embedded_ids(body)
