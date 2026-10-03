@@ -1,33 +1,54 @@
 # reposhape
 
-See the shape of a repository at a glance. Point it at a repo and get an
-interactive map of *your* code's file-level imports, with vendored and
-generated trees scoped out and clusters computed over import edges only. No
-LLM, no external analyser, nothing leaves your machine.
+reposhape draws a map of a codebase: every file, the folder it sits in, and
+which files import which. It reads TypeScript, JavaScript, Vue and Python,
+runs on your machine, and opens the map in your browser.
 
-TypeScript, JavaScript (including Vue single-file components) and Python are
-parsed with tree-sitter; each import is resolved to a real file in the repo or
-recorded with the reason it could not be.
+![LangChain's monorepo as a map: folders as circles, files as dots sized by line count](https://raw.githubusercontent.com/nabinpkl/reposhape/main/docs/images/langchain-map-lines.jpg)
+
+*LangChain, 1,766 source files with tests hidden. Each circle is a folder and
+each dot is a file, sized by its line count. Colours are clusters worked out
+from the imports.*
+
+![The same map with the imports that cross between packages drawn on top](https://raw.githubusercontent.com/nabinpkl/reposhape/main/docs/images/langchain-map-edges.jpg)
+
+*The same repo with the imports that cross from one package to another drawn
+on top.*
 
 ## Install
 
-Python 3.14, macOS or Linux:
+You need Python 3.14 on macOS or Linux.
 
 ```bash
-uv tool install reposhape    # or: pipx install reposhape
+uv tool install reposhape
 ```
 
-## Use
+`pipx install reposhape` works too.
+
+## Quick start
 
 ```bash
-cd path/to/a/repo && reposhape up .          # analyse this repo, open its graph
-reposhape up                                 # open the repo picker
-reposhape up https://github.com/owner/repo   # clone it, keep it, open it
-reposhape status                             # where the background server is
-reposhape down                               # stop it
+cd path/to/your/repo
+reposhape up .
 ```
 
-The server keeps running in the background after the terminal closes, listens
-on 127.0.0.1 only, and refuses requests from other sites and other host names.
+This analyses the repo, starts a small local server and opens the map. The
+server keeps running after you close the terminal. `reposhape down` stops it.
 
-Source, docs and issues: <https://github.com/nabinpkl/reposhape>. MIT licensed.
+| Command | What it does |
+| --- | --- |
+| `reposhape up .` | Analyse the current repo and open its map |
+| `reposhape up <url>` | Clone a repo, analyse it and open its map |
+| `reposhape up` | Open the page on the repo picker |
+| `reposhape status` | Show whether the server is running, and where |
+| `reposhape down` | Stop the server |
+
+## Privacy
+
+Your code is parsed locally with tree-sitter. No LLM and no outside service
+is involved. The server only listens on 127.0.0.1 and rejects requests from
+other websites.
+
+## More
+
+Docs, source and issues: <https://github.com/nabinpkl/reposhape>. MIT licensed.
