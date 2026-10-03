@@ -15,6 +15,7 @@ and check the protocol rather than the status code.
 
 from __future__ import annotations
 
+import importlib.metadata
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -556,7 +557,7 @@ def create_app(*, read_only: bool) -> FastAPI:
     route, so read-only is a property of which routes exist, and the tests can
     build both apps in one process.
     """
-    app = FastAPI(title="reposhape", version="0.1.0")
+    app = FastAPI(title="reposhape", version=importlib.metadata.version("reposhape"))
     app.state.read_only = read_only
     # Taken once, at start: the build this process is running, which is what
     # `reposhape up` compares with its own to tell a stale server (daemon.py).
