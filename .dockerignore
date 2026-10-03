@@ -1,0 +1,38 @@
+# Build context for the release image (Dockerfile), which builds from the
+# repository root because the frontend stage needs the workspace lockfile there.
+#
+# Exclusions are about reproducibility first. A macOS-built node_modules or
+# virtualenv cannot run in a Linux image, and a host copy that reached the
+# context could shadow what the lockfile install produced.
+**/node_modules
+**/.venv
+**/__pycache__
+**/*.pyc
+backend/dist
+frontend/.next
+frontend/out
+# The bundle is rebuilt inside the image from frontend/. A host copy here would
+# be whatever `just web-export` last produced, not what this commit contains.
+backend/src/reposhape/web
+
+.git
+.claude
+
+# The image runs the application, not its tests or its documentation, and a doc
+# edit should not invalidate a layer or change a digest.
+backend/tests
+*.md
+docs
+justfile
+ops
+# Except graphify's lock, which the image installs from.
+!ops/graphify/requirements.txt
+tools
+
+# `**/` is load-bearing: `*` does not cross a `/` in these patterns, so a bare
+# `.env` would exclude only the root one.
+**/.env
+**/.env.*
+compose.release.yaml
+.source-commit
+.source-dirty

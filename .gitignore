@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+.next/
+.DS_Store
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+frontend/out/
+# The static export, copied into the package by `just web-export`. Build output.
+backend/src/reposhape/web/
+# Notes about one machine, and one deployment's real host. Never committed.
+CLAUDE.local.md
+ops/deployments/hosted.env
+# `just package`: the wheel and sdist that get published.
+dist/

@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+/*
+ * The palette is measured, not invented: the dark values are read off
+ * graphify's rendered page and recorded in docs/graph-rendering.md. The graph
+ * is the product, so the chrome stays quiet and nothing competes with the
+ * cluster colours.
+ *
+ * Two schemes, one token set. `:root` is dark; `html.light` (the class
+ * next-themes puts on <html> when the resolved theme is light) redefines the
+ * same tokens, so every component flips without a single `dark:` variant.
+ * The graph canvas follows separately through graphModel's SCHEMES, because
+ * its colours are pre-composited data, not CSS.
+ */
+@theme {
+  --color-canvas: #0f0f1a;
+  --color-panel: #1a1a2e;
+  --color-line: #2a2a4e;
+  --color-line-strong: #3a3a5e;
+  --color-fg: #e0e0e0;
+  --color-muted: #9a9ab0;
+  --color-faint: #5c5c72;
+  --color-accent: #4e79a7;
+  /* Errors and the one destructive confirm. Its own token because red-400 is
+     legible on this dark panel and washes out to about 2.5:1 on white. */
+  --color-danger: #f87171;
+  /* Runtime links (ADR-0009). Mirrors SCHEMES.runtimeLink in graphModel, which
+     the canvas paints with; this is the chrome's key for it. */
+  --color-runtime-link: #e0a93e;
+
+  --sidebar-w: 288px;
+  --aside-w: 520px;
+
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html.light {
+  color-scheme: light;
+  --color-canvas: #eef0f4;
+  --color-panel: #ffffff;
+  --color-line: #dfe3ea;
+  --color-line-strong: #c3cad6;
+  --color-fg: #1f2328;
+  --color-muted: #59636e;
+  --color-faint: #9aa1b2;
+  --color-accent: #34618f;
+  --color-danger: #b42318;
+  --color-runtime-link: #a8700a;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-fg);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  /* The shell owns the viewport. If this ever scrolls, a pane is missing its
+     min-h-0. See features/shell/AppShell. */
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* Scrollbars belong to the pane they are in, not to the OS default, or a dark
+   panel gets a bright grey gutter down its edge. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/*
+ * Line numbers for Shiki output, which wraps each line in `.line`. Counters
+ * rather than injected markup: the HTML stays byte-identical to what Shiki
+ * produced, and the numbers are unselectable so copying code never grabs them.
+ * A file's trailing newline yields one empty last `.line` that is nobody's
+ * line, so it carries no number; genuinely empty lines in the middle keep
+ * theirs. Width matches the fallback gutter in FileViewer (w-10 + mr-4).
+ */
+.code-lines code {
+  counter-reset: line;
+}
+.code-lines code .line::before {
+  content: counter(line);
+  counter-increment: line;
+  display: inline-block;
+  min-width: 2.5rem;
+  margin-right: 1rem;
+  text-align: right;
+  color: var(--color-faint);
+  user-select: none;
+}
+.code-lines code .line:last-child:empty::before {
+  content: none;
+}

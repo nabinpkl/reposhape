@@ -1,0 +1,49 @@
+# Repos the hosted, read-only deployment serves. One git URL per line.
+# `just release-repos` clones and analyses each inside the container; it is the
+# only way a repo gets onto that server, because visitors cannot add one.
+#
+# The rule: MIT, checked against the repo's own LICENSE when added. The page
+# shows file contents, which MIT permits only with the copyright and permission
+# notice attached. The file pane shows the NEAREST license above each file
+# (licensing.py), so a package or plugin with its own LICENSE is credited as
+# itself. Still scan when adding a repo: nested licenses that are not MIT break
+# the rule even when they are credited correctly.
+#
+# Audit, 2026-09-29, of the clones served by release 2026-09-29.3:
+#
+# langchain @ 78a3cbcc (root MIT, Copyright (c) LangChain, Inc.)
+#   22 nested LICENSE files under libs/, all MIT, all LangChain, Inc.
+#   The root notice is accurate for every file. Clean.
+#
+# opencode @ 7945de20 (root MIT, Copyright (c) 2025 opencode)
+#   packages/http-recorder, packages/ui: MIT, opencode. Accurate.
+#   packages/docs: MIT, Copyright (c) 2023 Mintlify. MISATTRIBUTED by the pane,
+#   which names opencode for these files.
+#
+# hermes-agent @ 39faafb6 (root MIT, Copyright (c) 2025 Nous Research)
+#   Nous Research, MIT (accurate): apps/desktop/src/plugins/hermes-bots,
+#     skills/productivity/{docx,pdf,powerpoint,xlsx}.
+#   Other holders, MIT (MISATTRIBUTED): optional-skills/creative/
+#     {ai-presenter-video, auteur, dream-loop, ip-as-logo, mono-color,
+#     system-atlas}, optional-skills/software-development/{ast-grep, pr-lens},
+#     optional-skills/web-development/scrollcraft, plugins/hermes-achievements,
+#     skills/creative/humanizer.
+#   plugins/security-guidance: Apache-2.0 with a NOTICE file. BREAKS THE RULE:
+#     not MIT, and Apache-2.0 requires its NOTICE to travel with the copies.
+#
+# Reach, checked against the analyses: the pane only opens graphed source
+# files. opencode's packages/docs holds none, and neither do hermes-agent's
+# dream-loop, ip-as-logo, mono-color, pr-lens or humanizer, so those were never
+# shown. The misattribution was real for 24 files: ai-presenter-video (2),
+# auteur (9), system-atlas (2), ast-grep (1), scrollcraft (7) and
+# hermes-achievements (3).
+#
+# Resolved in release 2026-09-29.5: the pane resolves the nearest license per
+# file, and each of those directories is credited to its own holder.
+# hermes-agent's plugins/security-guidance (2 graphed files) is Apache-2.0; since
+# release 2026-09-29.6 the pane shows its NOTICE with its license, which is what
+# Apache-2.0 asks of a redistribution. It remains the one non-MIT directory in
+# the set: kept knowingly, not by oversight.
+https://github.com/langchain-ai/langchain
+https://github.com/NousResearch/hermes-agent
+https://github.com/anomalyco/opencode

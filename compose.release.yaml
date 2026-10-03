@@ -1,0 +1,66 @@
+# The hosted deployment (`just release-deploy`).
+#
+# One container, because there is one server: the API serves the browser
+# client's static export itself (ADR-0008). Configuration comes from
+# `ops/deployments/hosted.env`, which holds no secrets because this deployment
+# has none.
+
+name: reposhape
+
+services:
+  web:
+    image: reposhape:${DEPLOY_RELEASE:?set DEPLOY_RELEASE from ops/deployments/hosted.env}
+    restart: unless-stopped
+    env_file:
+      - ops/deployments/hosted.env
+    ports:
+      # LOOPBACK ONLY. Tailscale Serve proxies to this from the host, and is the
+      # one way in. Binding 0.0.0.0 would publish it on the VPS's public address,
+      # which is the step ADR-0008 keeps separate from deploying.
+      - "127.0.0.1:${DEPLOY_HOST_PORT:?set DEPLOY_HOST_PORT}:8000"
+    volumes:
+      # Named volumes rather than host paths: they take their first ownership
+      # from the image's /data directories, so the unprivileged user can write
+      # them with no chown on the host, and `compose down` keeps them. A clone
+      # is data (ADR-0007); only `down -v` or `docker volume rm` loses one.
+      - clones:/data/clones
+      - cache:/data/cache
+      # Runtime-link rules for the curated repos (ADR-0009), from the synced
+      # tree. Mounted rather than baked in, so a rules change needs a
+      # re-analysis (`just release-repos`), not an image.
+      - ./ops/link-rules:/etc/reposhape/links:ro
+    healthcheck:
+      # Health, not the page: it is the request that proves the app imported
+      # and read its settings. No curl in the image; its own Python is the tool.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          # A shared host may already be into swap, and an unbounded container
+          # would then be found by the OOM killer choosing among everything.
+          # 1G because `reposhape clone` analyses inside this container, and
+          # the curated set includes langchain.
+          memory: 1G
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# The default bridge network: nothing here reaches the host.
+
+volumes:
+  clones:
+    name: reposhape-clones
+  cache:
+    name: reposhape-cache

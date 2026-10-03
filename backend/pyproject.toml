@@ -1,0 +1,103 @@
+[project]
+name = "reposhape"
+version = "0.1.0"
+description = "See the shape of a repository at a glance: a local, interactive map of a codebase's file-level imports."
+readme = "README.md"
+license = "MIT"
+# The notices are written by `just web-export` beside the page they cover.
+license-files = ["LICENSE", "src/reposhape/web/THIRD_PARTY_NOTICES.txt"]
+authors = [{ name = "nabinpkl" }]
+keywords = ["import graph", "dependency graph", "code visualization", "tree-sitter", "typescript", "python", "monorepo"]
+# Capped below 3.15 until the package is smoke-tested there: tree-sitter's
+# wheels decide whether an install needs a compiler.
+requires-python = ">=3.14,<3.15"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    # The background server is a POSIX session leader stopped by signals
+    # (daemon.py); there is no Windows equivalent here.
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = [
+    # Floors are the versions uv.lock tests against, not older guesses: an
+    # installer resolves these fresh, and `tools/package_smoke.sh <dist> floors`
+    # installs exactly them. Older pydantic has no Python 3.14 wheel at all.
+    "fastapi>=0.141.1",
+    # Louvain community detection and the graph structure itself. The clustering
+    # behaviour is ported from an earlier script, graphify-import-graph.py, which
+    # used this same implementation, so results stay comparable.
+    "networkx>=3.6.1",
+    # gitignore-syntax matching for .reposhapeignore. Also the fallback path
+    # when the target is not a git repo and `git ls-files` is unavailable.
+    "pathspec>=1.1.1",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15",
+    # The extractor. 0.24 replaced Query.captures() with QueryCursor; parsing.py
+    # is written against the 0.26 API and will not run on older releases.
+    "tree-sitter>=0.26,<0.27",
+    "tree-sitter-python>=0.25",
+    "tree-sitter-typescript>=0.23.2",
+    "typer>=0.27.2",
+    # Capped: daemon.py subclasses uvicorn.Server and overrides its startup,
+    # on_tick and shutdown, which are internals rather than API. Raise the cap
+    # after `package_smoke.sh <dist> newest` passes on the new release.
+    "uvicorn>=0.52.4,<0.55",
+]
+
+[project.scripts]
+reposhape = "reposhape.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/nabinpkl/reposhape"
+Repository = "https://github.com/nabinpkl/reposhape"
+Issues = "https://github.com/nabinpkl/reposhape/issues"
+
+[dependency-groups]
+dev = [
+    "hatchling>=1.27",
+    "httpx2>=2.12",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+    "ty>=0.0.1a1",
+]
+
+[build-system]
+# 1.27 is the first to write PEP 639 license metadata (`license = "MIT"`).
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reposhape"]
+# The browser client's static export (`just web-export`). Gitignored because it
+# is build output, and hatch skips gitignored files unless told otherwise, so
+# without this line the wheel installs an `reposhape up` with no page to serve.
+artifacts = ["src/reposhape/web/**"]
+
+# hatch_build.py: refuses a wheel or sdist with no page in it.
+[tool.hatch.build.hooks.custom]
+
+# `uv publish --index testpypi`, from the release workflow's manual run.
+# Explicit, so nothing ever resolves from it.
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+testpaths = ["tests"]

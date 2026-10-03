@@ -1,0 +1,25 @@
+# Runtime links in hermes-agent that no syntax states (ADR-0009). Read by
+# the deployment from REPOSHAPE_LINK_RULES_DIR as <repo name>.toml.
+#
+# Each rule is a loader that reaches a directory by walking it. Written from
+# the loader's own source, checked 2026-09-29 against 666f313d; the analysis
+# reports a rule that stops matching as a problem, so drift shows up.
+
+# tools/registry.py: discover_builtin_tools walks tools/, skips __init__.py,
+# registry.py and mcp_tool.py, and imports each module whose source calls
+# registry.register (it checks by AST scan). A subpackage needs __init__.py.
+[[loader]]
+loader = "tools/registry.py"
+anchor = "def discover_builtin_tools"
+files = ["tools/*.py", "tools/*/*.py"]
+exclude = ["tools/__init__.py", "tools/registry.py", "tools/mcp_tool.py"]
+contains = "registry.register("
+
+# hermes_cli/plugins_loader.py: bundled plugins are <repo>/plugins/<name>/ or,
+# one level down, <repo>/plugins/<category>/<name>/ (plugins_discovery caps the
+# depth at one), and each is imported through its __init__.py with
+# spec_from_file_location. Its register(ctx) is where hooks get attached.
+[[loader]]
+loader = "hermes_cli/plugins_loader.py"
+anchor = "spec_from_file_location("
+files = ["plugins/*/__init__.py", "plugins/*/*/__init__.py"]

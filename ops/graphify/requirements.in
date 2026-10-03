@@ -1,0 +1,8 @@
+# graphify for the release image: the comparison tabs on the curated repos
+# (`just release-graphify`). `just graphify-lock` turns this into
+# requirements.txt, which the Dockerfile installs with hashes required.
+#
+# No extras, on purpose. The LLM backends are extras (anthropic, openai,
+# gemini, ollama, kimi, bedrock), so without them the image holds no model
+# client at all and only the LLM-free half of graphify can run (AGENTS.md).
+graphifyy==0.9.57

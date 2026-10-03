@@ -1,0 +1,12 @@
+packages:
+  - frontend
+
+# Build scripts denied deliberately. sharp's native
+# postinstall only serves production image optimization, which this app does not
+# use (it renders one canvas and no images), and unrs-resolver falls back to its
+# JavaScript implementation. Every package allowed here is a package permitted
+# to run arbitrary code at install time, so the list stays empty until something
+# genuinely breaks without it.
+allowBuilds:
+  sharp: false
+  unrs-resolver: false

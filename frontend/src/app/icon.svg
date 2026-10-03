@@ -1,0 +1,34 @@
+<!--
+  The mark is the product's own output, shrunk: one hub fanning edges out to
+  three satellites, in the canvas ground and the Tableau 10 cluster ramp this
+  tool draws every graph with (`PALETTE` in graphing.py, the canvas colour in
+  globals.css). A folder glyph would have said "files"; this says "the import
+  graph of them", which is the whole difference between this tool and a tree.
+
+  Three satellites and no more, because a tab strip renders this at 16px and a
+  fourth turns the cluster into mush. Edges are drawn under the nodes so the
+  nodes occlude their ends, which is how they attach to the visible boundary
+  rather than the centre without any clamping arithmetic. Their colour is the
+  hub's own, mixed toward the ground the way the canvas mixes edge colour from
+  its source node, at 0.6 rather than the canvas's 0.35, because a hairline
+  that is honest at full size is invisible at sixteen pixels.
+
+  The ground is opaque on purpose. Browser tab strips are light in one theme
+  and dark in the other, and a transparent mark loses its edges on the dark one.
+
+  No double hyphen anywhere in this comment: it is illegal inside an XML
+  comment and Chrome fails the whole file to a broken-image glyph, which is
+  how the first draft of this icon rendered.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="7" fill="#0f0f1a" />
+  <g stroke="#354f6f" stroke-width="2" stroke-linecap="round">
+    <line x1="12.5" y1="19.5" x2="22" y2="9.5" />
+    <line x1="12.5" y1="19.5" x2="7.5" y2="8" />
+    <line x1="12.5" y1="19.5" x2="25" y2="23.5" />
+  </g>
+  <circle cx="7.5" cy="8" r="2.9" fill="#e15759" />
+  <circle cx="22" cy="9.5" r="3.6" fill="#f28e2b" />
+  <circle cx="25" cy="23.5" r="3" fill="#59a14f" />
+  <circle cx="12.5" cy="19.5" r="5.2" fill="#4e79a7" />
+</svg>

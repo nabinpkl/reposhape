@@ -1,0 +1,14 @@
+# Copy to `.reposhapeignore` in the repo you are analysing.
+#
+# gitignore syntax, exclude-only, merged on top of .gitignore. This is the
+# scope decision: which trees are yours. It is deliberately a list you write
+# rather than a statistic the tool computes, because "exclude the top 0.1% by
+# degree" cannot tell a vendored bundle from a genuine architectural hub in
+# your own code, and will happily suppress the second.
+#
+# The lines below are examples. Yours will differ.
+
+vendor/
+third_party/
+packages/*/dist/
+src/generated/
