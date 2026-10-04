@@ -15,29 +15,13 @@ from reposhape.cli import app
 runner = CliRunner()
 
 
-def test_forget_removes_every_source_and_prints_what_went(sample_repo: Path):
-    imports = analyze(sample_repo)
-    cache.write(imports)
-    cache.write(imports.model_copy(update={"source": "graphify-imports"}))
+def test_forget_removes_the_analysis_and_prints_what_went(sample_repo: Path):
+    cache.write(analyze(sample_repo))
 
     result = runner.invoke(app, ["forget", str(sample_repo)])
 
     assert result.exit_code == 0, result.output
-    assert sorted(result.stdout.split()) == sorted(
-        [
-            "forgot",
-            cache.repo_key(sample_repo),
-            "forgot",
-            cache.repo_key(sample_repo, "graphify-imports"),
-        ]
-    )
-    assert cache.summaries() == []
-
-
-def test_forget_finds_a_repo_cached_only_under_another_source(sample_repo: Path):
-    cache.write(analyze(sample_repo).model_copy(update={"source": "graphify-all"}))
-    result = runner.invoke(app, ["forget", str(sample_repo)])
-    assert result.exit_code == 0, result.output
+    assert result.stdout.split() == ["forgot", cache.repo_key(sample_repo)]
     assert cache.summaries() == []
 
 
@@ -145,7 +129,7 @@ def test_up_with_a_repo_analyses_it_and_opens_its_graph(
     _with_a_page_and_a_server(monkeypatch, tmp_path)
     result = runner.invoke(app, ["up", str(sample_repo), "--no-open", "--port", "7999"])
     assert result.exit_code == 0, result.output
-    key = cache.repo_key(sample_repo.resolve(), "imports")
+    key = cache.repo_key(sample_repo.resolve())
     assert f"open  http://127.0.0.1:7999/?repo={key}" in result.stdout
     assert [row.repo_path for row in cache.summaries()] == [str(sample_repo.resolve())]
 

@@ -8,37 +8,36 @@ import { cn } from "@/lib/class-names";
 /**
  * Which drawing of the repo is on screen.
  *
- * `ours` is the sigma canvas over our clustering. `map`, `map-lines` and
- * `map-edges` are the same analysis with the files packed into their folders,
- * differing in what a dot's area means -- one file, or one file's length -- and
- * in whether the imports that leave a package are drawn over them. They are
- * separate tabs rather than one tab with toggles so the split view can hold any
- * pair of them, and the difference is read by looking rather than by
- * remembering. `graphify` is graphify's own vis-network page, framed verbatim;
- * `graphify-files` is that same renderer over file-level data, one node per
- * file and no symbols.
+ * One row, grouped by what the data is, so the group says it once and each tab
+ * only has to say how it is drawn. Files and their imports are this tool's own
+ * extraction; `import-graph` lays them out by force, and the three folder tabs
+ * pack the same files into their folders, differing in what a dot's area means
+ * and in whether the imports that leave a package are drawn over them. Symbols
+ * are graphify's: `symbol-graph` frames graphify's own page verbatim, because
+ * symbol-level extraction is a non-goal here (PRD.md).
+ *
+ * Separate tabs rather than one tab with toggles, so the split view can hold
+ * any pair of them and a difference is read by looking, not by remembering.
  */
-export type Renderer = "ours" | "map" | "map-lines" | "map-edges" | "graphify" | "graphify-files";
+export type Renderer = "import-graph" | "folders" | "folders-size" | "folders-imports" | "symbol-graph";
 
 /**
  * True for a renderer that frames somebody else's page.
  *
  * A framed pane carries its own sidebar and legend, so ours are hidden and the
  * graph is not fetched for it. Everything else draws from the `GraphView` this
- * app already has, which is what makes those tabs comparable rather than merely
- * adjacent.
+ * app already has.
  */
 export function isFramed(renderer: Renderer): boolean {
-  return renderer === "graphify" || renderer === "graphify-files";
+  return renderer === "symbol-graph";
 }
 
+const SYMBOL_GRAPH = "Every function, class and method, and the calls between them, drawn by graphify.";
+
 /**
- * Ours versus theirs, as a drawing rather than as data.
- *
- * The source tabs switch which extractor's edges feed one renderer; this
- * switches the renderer itself. A repo with no graphify page keeps the tab
- * visible but disabled with the build command on hover, for the same reason a
- * missing extractor is shown rather than hidden.
+ * The tab row. The symbol graph is shown disabled, with what builds it on
+ * hover, when graphify has not produced a page for this repo: hiding it would
+ * leave a reader no way to learn the view exists.
  */
 export function RendererTabs({
   analysisKey,
@@ -54,59 +53,71 @@ export function RendererTabs({
     queryFn: () => api.graphifyStatus(analysisKey),
   });
   const ready = status.data?.ready ?? false;
-  const filesStatus = useQuery({
-    queryKey: ["graphify-files-status", analysisKey],
-    queryFn: () => api.graphifyFilesStatus(analysisKey),
-  });
-  const filesReady = filesStatus.data?.ready ?? false;
+  const reason = status.data?.reason;
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-px rounded border border-line-strong p-px">
-      <Tab id="ours" active={renderer} onPick={onRenderer}>
-        ours
-      </Tab>
-      <Tab
-        id="map"
-        active={renderer}
-        onPick={onRenderer}
-        title="Files packed into their folders, one dot each, no edges."
-      >
-        map
-      </Tab>
-      <Tab
-        id="map-lines"
-        active={renderer}
-        onPick={onRenderer}
-        title="The same map with every dot sized by its file's line count."
-      >
-        map · lines
-      </Tab>
-      <Tab
-        id="map-edges"
-        active={renderer}
-        onPick={onRenderer}
-        title="The map, with the imports that leave their package drawn over it."
-      >
-        map · edges
-      </Tab>
-      <Tab
-        id="graphify-files"
-        active={renderer}
-        onPick={onRenderer}
-        disabled={!filesReady}
-        title={filesStatus.data?.reason ?? undefined}
-      >
-        graphify files
-      </Tab>
-      <Tab
-        id="graphify"
-        active={renderer}
-        onPick={onRenderer}
-        disabled={!ready}
-        title={status.data?.reason ?? undefined}
-      >
-        graphify page
-      </Tab>
+    // Wraps by group rather than scrolling, so a narrow screen still shows what
+    // the data is beside every tab that draws it.
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+      <Group label="Files">
+        <Tab
+          id="import-graph"
+          active={renderer}
+          onPick={onRenderer}
+          title="Each file is a dot and each import a line, laid out by ForceAtlas2."
+        >
+          import graph
+        </Tab>
+        <Tab
+          id="folders"
+          active={renderer}
+          onPick={onRenderer}
+          title="Folders as nested circles, one dot per file."
+        >
+          folders
+        </Tab>
+        <Tab
+          id="folders-size"
+          active={renderer}
+          onPick={onRenderer}
+          title="Dot area is the file's line count."
+        >
+          folders · size
+        </Tab>
+        <Tab
+          id="folders-imports"
+          active={renderer}
+          onPick={onRenderer}
+          title="Imports that leave their package, drawn over the folders."
+        >
+          folders · imports
+        </Tab>
+      </Group>
+      <Group label="Symbols">
+        <Tab
+          id="symbol-graph"
+          active={renderer}
+          onPick={onRenderer}
+          disabled={!ready}
+          title={ready || !reason ? SYMBOL_GRAPH : `${SYMBOL_GRAPH} ${reason}`}
+        >
+          symbol graph
+        </Tab>
+      </Group>
+    </div>
+  );
+}
+
+/** What the data is, said once for the tabs that draw it. */
+function Group({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className="flex min-w-0 items-center gap-1.5">
+      <span className="shrink-0 text-[11px] text-muted">{label}</span>
+      {/* Wraps onto a second line only where one line cannot fit: a phone, or
+          one half of the split view. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-px rounded border border-line-strong p-px">
+        {children}
+      </div>
     </div>
   );
 }
@@ -124,7 +135,7 @@ function Tab({
   active: Renderer;
   onPick: (renderer: Renderer) => void;
   disabled?: boolean;
-  title?: string;
+  title: string;
   children: React.ReactNode;
 }) {
   return (
@@ -132,10 +143,14 @@ function Tab({
       type="button"
       disabled={disabled}
       title={title}
+      aria-pressed={active === id}
       onClick={() => onPick(id)}
       className={cn(
-        "rounded-sm px-2 py-1 text-[11.5px] whitespace-nowrap transition-colors",
-        active === id ? "bg-line text-fg" : "text-muted hover:bg-line/60 hover:text-fg",
+        "rounded-sm px-2 py-1 text-[11.5px] whitespace-nowrap outline-none transition-colors",
+        "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent",
+        active === id
+          ? "bg-line text-fg"
+          : "text-muted hover:bg-line/60 hover:text-fg active:bg-line",
         disabled && "cursor-not-allowed text-faint hover:bg-transparent hover:text-faint",
       )}
     >

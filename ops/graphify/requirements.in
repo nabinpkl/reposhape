@@ -1,4 +1,4 @@
-# graphify for the release image: the comparison tabs on the curated repos
+# graphify for the release image: the symbol graph tab on the curated repos
 # (`just release-graphify`). `just graphify-lock` turns this into
 # requirements.txt, which the Dockerfile installs with hashes required.
 #

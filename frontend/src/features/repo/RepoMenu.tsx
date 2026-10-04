@@ -42,10 +42,6 @@ const commitOf = (repo: RepoSummary) =>
  * other meant loading its graph first. Each row here picks with its body and
  * forgets with its trailing button, and forgetting leaves the menu open so a
  * reader clearing out several does not reopen it each time.
- *
- * The cache holds one row per repo AND source, so listing rows directly would
- * put one repo here three times. This names the repository; the source tabs
- * beside it name which extractor's graph of it you are reading.
  */
 export function RepoMenu({
   rows,
@@ -80,20 +76,13 @@ export function RepoMenu({
     return () => clearTimeout(timer);
   }, [armed]);
 
-  const byRepo = new Map<string, RepoSummary>();
-  for (const row of rows ?? []) {
-    const seen = byRepo.get(row.repo_path);
-    if (!seen || (seen.source !== "imports" && row.source === "imports")) {
-      byRepo.set(row.repo_path, row);
-    }
-  }
-  const repos = [...byRepo.values()];
+  const repos = rows ?? [];
 
   const forget = useMutation({
     mutationFn: (key: string) => api.forget(key),
     onSuccess: async (removed, key) => {
       setArmed(null);
-      const gone = (rows ?? []).find((row) => row.key === key)?.repo_path;
+      const gone = repos.find((row) => row.key === key)?.repo_path;
       // Newest first, but not onto a repo whose directory is gone: its graph
       // would draw from the artifact and every file in it would answer 410.
       const others = repos.filter((row) => row.repo_path !== gone);
@@ -108,12 +97,8 @@ export function RepoMenu({
     },
   });
 
-  const pick = (repoPath: string) => {
-    const candidates = (rows ?? []).filter((row) => row.repo_path === repoPath);
-    const sameSource = candidates.find((row) => row.source === active?.source);
-    const target =
-      sameSource ?? candidates.find((row) => row.source === "imports") ?? candidates[0];
-    if (target) onPick(target);
+  const pick = (repo: RepoSummary) => {
+    onPick(repo);
     setOpen(false);
   };
 
@@ -191,7 +176,7 @@ export function RepoMenu({
                 now={now}
                 armed={armed === repo.repo_path}
                 pending={forget.isPending && forget.variables === repo.key}
-                onPick={() => pick(repo.repo_path)}
+                onPick={() => pick(repo)}
                 onArm={() => setArmed(repo.repo_path)}
                 onDisarm={() => setArmed((path) => (path === repo.repo_path ? null : path))}
                 onForget={onForget ? () => forget.mutate(repo.key) : null}

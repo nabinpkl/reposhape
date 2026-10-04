@@ -106,31 +106,21 @@ def test_forgetting_a_repo_takes_it_out_of_the_picker(
     assert client.delete(f"/api/repos/{analysed}").status_code == 404
 
 
-def test_forgetting_takes_every_source_and_the_pages_drawn_from_them(
-    client: TestClient, analysed: str, isolated_cache: Path
-):
-    """A repo shows in the picker while any of its rows exist, so all of them go."""
-    from reposhape import cache, graphify_files
-
-    imports = cache.find(analysed)
-    assert imports is not None
-    cache.write(imports.model_copy(update={"source": "graphify-imports"}))
-    sibling = cache.repo_key(imports.repo_path, "graphify-imports")
-    pages = graphify_files.workdir(sibling)
-    pages.mkdir(parents=True)
-    (pages / "graph.html").write_text("<html></html>")
-
-    removed = client.delete(f"/api/repos/{sibling}").json()
-    assert sorted(removed) == sorted([analysed, sibling])
-    assert client.get("/api/repos").json() == []
-    assert not pages.exists()
-
-
 def test_a_stale_artifact_can_still_be_forgotten(client: TestClient, isolated_cache: Path):
     """The picker cannot read it, which is exactly when it needs to go."""
     isolated_cache.mkdir(parents=True, exist_ok=True)
     (isolated_cache / "old-0123456789ab.json").write_text('{"schema_version": 1}')
     assert client.delete("/api/repos/old-0123456789ab").json() == ["old-0123456789ab"]
+
+
+def test_a_stale_artifact_is_left_out_of_the_picker_rather_than_breaking_it(
+    client: TestClient, analysed: str, isolated_cache: Path
+):
+    """One old file must not take every other repo off the list with it."""
+    (isolated_cache / "old-0123456789ab.json").write_text('{"schema_version": 1}')
+    response = client.get("/api/repos")
+    assert response.status_code == 200
+    assert [row["key"] for row in response.json()] == [analysed]
 
 
 def test_forget_refuses_a_key_that_escapes_the_cache(isolated_cache: Path, tmp_path: Path):
@@ -219,12 +209,10 @@ def test_a_fetch_that_fails_still_answers_with_an_analysis(client: TestClient, o
 PUBLIC_ROUTES = {
     ("GET", "/api/health"),
     ("GET", "/api/repos"),
-    ("GET", "/api/sources/{key}"),
     ("GET", "/api/analysis/{key}"),
     ("GET", "/api/paths/{key}"),
     ("GET", "/api/graph/{key}"),
     ("GET", "/api/graphify-status/{key}"),
-    ("GET", "/api/graphify-files-status/{key}"),
     ("GET", "/api/graphify-page/{key}"),
     ("GET", "/api/file/{key}"),
     ("GET", "/api/license/{key}"),
@@ -254,7 +242,6 @@ def test_the_operator_routes_exist_only_on_the_personal_server():
         ("GET", "/api/folders"),
         ("POST", "/api/clone"),
         ("POST", "/api/analyze"),
-        ("GET", "/api/graphify-files/{key}"),
     }
 
 
@@ -265,7 +252,6 @@ def test_a_visitor_cannot_act_on_the_host(public: TestClient, analysed: str, sam
         public.post("/api/clone", json={"url": "https://example.com/x.git"}),
         public.post("/api/analyze", json={"repo_path": str(sample_repo), "refresh": True}),
         public.delete(f"/api/repos/{analysed}"),
-        public.get(f"/api/graphify-files/{analysed}"),
     ]
     assert all(response.status_code in (404, 405) for response in attempts), [
         (response.request.method, response.request.url.path, response.status_code)
@@ -292,11 +278,6 @@ def test_the_read_only_server_says_so_and_names_no_host_paths(public: TestClient
     }
 
 
-def test_the_graphify_renderer_is_not_offered_read_only(public: TestClient, analysed: str):
-    status = public.get(f"/api/graphify-files-status/{analysed}").json()
-    assert status["ready"] is False
-
-
 def test_every_response_carries_the_security_headers(client: TestClient):
     response = client.get("/api/health")
     assert response.headers["x-content-type-options"] == "nosniff"
@@ -313,14 +294,6 @@ def test_a_reanalysis_is_not_answered_from_the_old_partition(
     client.post("/api/analyze", json={"repo_path": str(sample_repo), "refresh": True})
     after = client.get(f"/api/graph/{analysed}").json()
     assert len(after["nodes"]) == len(before["nodes"]) + 1
-
-
-def test_read_only_offers_only_the_sources_already_built(public: TestClient, analysed: str):
-    """A tab that is ready would build on click, and building is an operator act."""
-    options = {row["source"]: row for row in public.get(f"/api/sources/{analysed}").json()}
-    assert options["imports"]["ready"] is True
-    assert options["graphify-imports"]["ready"] is False
-    assert options["graphify-all"]["ready"] is False
 
 
 def test_the_license_names_itself_and_its_holder(

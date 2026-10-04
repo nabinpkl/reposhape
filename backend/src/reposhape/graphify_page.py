@@ -1,15 +1,13 @@
-"""graphify's own page, served verbatim.
+"""The symbol graph: graphify's own page, served verbatim.
 
-The comparison tabs (`graphify-imports`, `graphify-all`) project graphify's
-symbol graph onto files and draw it through our renderer, so a difference in
-the picture is a difference in the extractor. This module is the other half of
-that comparison: graphify's `graph.html` exactly as its own pipeline wrote it,
-same code, same dependency, same vis-network renderer.
+This tool extracts files and the imports between them. Symbols (functions,
+classes, methods and the calls between them) are a stated non-goal (PRD.md),
+and graphify already extracts them, so the `symbol graph` tab shows
+graphify's `graph.html` exactly as its own pipeline wrote it.
 
-It reads the artifact and nothing else. No graphify code is imported; the page
-is produced by the `graphify` binary on the machine (`reposhape graphify-page` drives
-that pipeline), and served here byte for byte. If the page looks different
-from our tabs, that difference is graphify's rendering, not ours.
+No graphify code is imported. The page is produced by the `graphify` binary on
+the machine (`reposhape graphify-page` drives that pipeline) and served byte
+for byte, so whatever it shows is graphify's data and graphify's drawing.
 """
 
 from __future__ import annotations
@@ -47,18 +45,18 @@ def status_of(repo: Path) -> tuple[bool, str | None]:
     if has_page(repo):
         return True, None
     if not (repo / ARTIFACT).is_file():
-        return False, (f"no {ARTIFACT} in this repo. Run: reposhape graphify-page {repo}")
-    return False, (f"no {PAGE} in this repo. Run: reposhape graphify-page {repo}")
+        return False, (f"No {ARTIFACT} in this repo. Run: reposhape graphify-page {repo}")
+    return False, (f"No {PAGE} in this repo. Run: reposhape graphify-page {repo}")
 
 
 def ensure(repo: Path, *, refresh: bool = False) -> Path:
     """Run graphify's own pipeline until its page exists. Returns the page.
 
     From scratch (`graph.json` missing) that is `graphify update`, which
-    extracts, clusters and writes the page in one go. When the extraction
-    already exists, `graphify export html` re-emits just the page from it, so
-    a re-render never pays for a re-extract. `refresh` forces the page
-    re-emit even when one is already there.
+    extracts, clusters and writes the page in one go. When only the page is
+    missing, `graphify export html` re-emits it from the extraction already
+    there. `refresh` re-extracts, because a repo that moved has symbols the
+    old extraction never saw, and a page re-drawn from it would still be stale.
     """
     target = page_path(repo)
     if target.is_file() and not refresh:
@@ -70,7 +68,10 @@ def ensure(repo: Path, *, refresh: bool = False) -> Path:
             "the `graphify` binary is not on PATH, so its page cannot be built here."
         )
 
-    if not (repo / ARTIFACT).is_file():
+    if refresh or not (repo / ARTIFACT).is_file():
+        # graphify skips the page past its node limit, and an old page left
+        # behind would then be served as if it described the new extraction.
+        target.unlink(missing_ok=True)
         extract(repo)
     else:
         run(

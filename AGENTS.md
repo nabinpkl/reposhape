@@ -74,12 +74,11 @@ nothing authenticates.
 
 ## Only the LLM-free half of graphify may be run here
 
-The comparison in `graphify.py` and `graphify_page.py` is extractor against
-extractor on one repo. A graph whose nodes, edges or cluster names came out of
-a model is not a second extractor, it is a second answer, and two runs of it
-disagree. This tool is also a local daily tool with no API budget and no key it
-is entitled to spend, so an LLM call here is a cost the comparison never asked
-for.
+The symbol graph tab (`graphify_page.py`) shows graphify's own extraction of a
+repo. A graph whose nodes, edges or cluster names came out of a model is not an
+extraction, it is an answer, and two runs of it disagree. This tool is also a
+local daily tool with no API budget and no key it is entitled to spend, so an
+LLM call here is a cost nobody asked for.
 
 Verified against graphify 0.9.57's own source, not its help text:
 

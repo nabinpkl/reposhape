@@ -10,7 +10,7 @@ from reposhape.graphing import (
     extension_of,
     path_is_excluded,
 )
-from reposhape.models import Analysis, AnalysisStats, FileNode
+from reposhape.models import Analysis, AnalysisStats, FileNode, LinkStats
 
 
 def test_excluding_a_directory_does_not_take_a_similarly_named_sibling():
@@ -95,6 +95,15 @@ def _analysis(files: list[tuple[str, bool]], edges: list[tuple[str, str]]) -> An
             unresolved=0,
             assets=0,
             duration_ms=0,
+        ),
+        link_stats=LinkStats(
+            links=0,
+            keys_paired=0,
+            keys_unpaired=0,
+            dynamic_names=0,
+            generic_names=0,
+            unresolved_modules=0,
+            problems=[],
         ),
     )
 

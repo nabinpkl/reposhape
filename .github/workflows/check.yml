@@ -41,11 +41,6 @@ jobs:
         with:
           just-version: "1.50.0"
 
-      # The graphify comparison tests drive its exporter. The version
-      # ops/graphify/requirements.in pins, no extras: no model client.
-      - name: Install graphify
-        run: uv tool install graphifyy==0.9.57
-
       - name: Gate
         run: just check
 

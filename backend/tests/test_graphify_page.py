@@ -64,6 +64,31 @@ def test_ensure_with_a_page_already_there_runs_nothing(
     assert graphify_page.ensure(tmp_path) == page
 
 
+def test_refresh_re_extracts_and_never_serves_the_old_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A moved repo needs a new extraction, and graphify may then write no page.
+
+    An old page left in place would be served as though it described the new
+    extraction, so a refresh that ends without one has to say so.
+    """
+    out = tmp_path / "graphify-out"
+    out.mkdir()
+    (out / "graph.json").write_text("{}", encoding="utf-8")
+    (out / "graph.html").write_text("<html>old</html>", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_run(argv: list[str], _repo: Path, **_kwargs: object) -> None:
+        calls.append(argv)
+
+    monkeypatch.setattr(graphify_page, "binary", lambda: "/usr/bin/graphify")
+    monkeypatch.setattr(graphify_page, "run", fake_run)
+    with pytest.raises(GraphifyPageError, match="wrote no"):
+        graphify_page.ensure(tmp_path, refresh=True)
+    assert calls == [["/usr/bin/graphify", "update", str(tmp_path)]]
+    assert not (out / "graph.html").exists()
+
+
 def _analysed_with_page(client: TestClient, repo: Path) -> str:
     repo.mkdir(parents=True, exist_ok=True)
     (repo / "a.ts").write_text("export const a = 1;\n", encoding="utf-8")

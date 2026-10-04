@@ -86,6 +86,31 @@ def test_a_stale_artifact_says_so_rather_than_reading_as_absent(sample_repo, tmp
     raise AssertionError("a stale artifact must raise, not return None")
 
 
+def test_an_older_artifact_is_stale_even_when_it_still_parses(sample_repo):
+    """Unknown fields are ignored, so an old file can fit the current models.
+
+    Without the version check a schema bump would retire nothing: the old
+    artifact would keep being served as if this build had written it.
+    """
+    import json
+
+    from reposhape.cache import StaleArtifactError, analysis_path
+
+    cache.write(analyze(sample_repo))
+    target = analysis_path(sample_repo)
+    payload = json.loads(target.read_text())
+    payload["schema_version"] = 4
+    payload["source"] = "imports"
+    target.write_text(json.dumps(payload))
+
+    try:
+        cache.load(sample_repo)
+    except StaleArtifactError as error:
+        assert "schema 4" in str(error)
+        return
+    raise AssertionError("an older schema_version must raise, whatever the shape")
+
+
 def test_vue_components_are_nodes_and_edges_in_both_directions(tmp_path: Path):
     """A `.ts` importing a `.vue` was reported as a broken import before `.vue`
     was scanned, which is the wrong fact: the file was there."""

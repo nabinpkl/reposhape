@@ -26,30 +26,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import RequestResponseEndpoint
 
-from reposhape import (
-    browsing,
-    cache,
-    cloning,
-    daemon,
-    graphify,
-    graphify_files,
-    graphify_page,
-    licensing,
-    web_bundle,
-)
+from reposhape import browsing, cache, cloning, daemon, graphify_page, licensing, web_bundle
 from reposhape.analysis import analyze
 from reposhape.browsing import NoSuchDirectoryError, UnreadableDirectoryError
 from reposhape.cache import StaleArtifactError
 from reposhape.cloning import CloneError, UnsupportedUrlError, UpdateOutcome
 from reposhape.configuration import settings
-from reposhape.graphify import GraphifyArtifactError
-from reposhape.graphify_files import GraphifyFilesError
-from reposhape.graphify_page import GraphifyPageError
 from reposhape.graphing import build_view
 from reposhape.models import (
-    SOURCE_LABELS,
     Analysis,
-    AnalysisSource,
     FileContents,
     FileNode,
     FolderListing,
@@ -60,7 +45,6 @@ from reposhape.models import (
     RepoPaths,
     RepoSummary,
     RuntimeLink,
-    SourceOption,
 )
 from reposhape.scanning import language_of
 
@@ -77,12 +61,6 @@ operator = APIRouter()
 
 class AnalyzeRequest(BaseModel):
     repo_path: str
-    source: AnalysisSource = Field(
-        default="imports",
-        description="Which extractor's graph to build. `imports` is this tool's own; "
-        "the graphify sources project that tool's symbol graph onto files so the two "
-        "can be compared through the same clustering and the same renderer.",
-    )
     refresh: bool = Field(
         default=False,
         description="Re-run even when a cached artifact exists for this repo.",
@@ -134,8 +112,7 @@ def _require(key: str) -> Analysis:
 
 def _summary_of(analysis: Analysis) -> RepoSummary:
     return RepoSummary(
-        key=cache.repo_key(analysis.repo_path, analysis.source),
-        source=analysis.source,
+        key=cache.repo_key(analysis.repo_path),
         repo_path=analysis.repo_path,
         repo_name=analysis.repo_name,
         git_sha=analysis.git_sha,
@@ -171,12 +148,7 @@ def health(request: Request) -> Health:
 
 @reads.get("/api/repos")
 def list_repos() -> list[RepoSummary]:
-    """Cached analyses, newest first. The repo picker's read path.
-
-    One row per repo AND source, so the picker can show which extractors have
-    been run against a repo and the source tabs can switch between them without
-    re-analysing.
-    """
+    """Cached analyses, newest first, one per repo. The repo picker's read path."""
     return cache.summaries()
 
 
@@ -184,9 +156,7 @@ def list_repos() -> list[RepoSummary]:
 def forget_repo(key: str) -> list[str]:
     """Take a repository out of the picker. Answers with every key removed.
 
-    Removes the repository's artifacts for every source, not only the one
-    named, because the picker shows a repo while any of them remain. Only the
-    cache is touched; the analysed repo is never written to.
+    Only the cache is touched; the analysed repo is never written to.
     """
     removed = cache.forget(key)
     if not removed:
@@ -210,45 +180,6 @@ def list_folders(path: str = "") -> FolderListing:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except UnreadableDirectoryError as error:
         raise HTTPException(status_code=403, detail=str(error)) from error
-
-
-@reads.get("/api/sources/{key}")
-def list_sources(key: str, request: Request) -> list[SourceOption]:
-    """Which extractors could produce a graph of this analysis's repo.
-
-    `available` means an artifact is already cached and switching is a click;
-    `ready` means it could be built on request. A graphify source that is
-    neither says so with the reason, rather than offering a tab that fails.
-    A read-only server builds nothing on request, so there only what is
-    already cached is ready.
-    """
-    analysis = _require(key)
-    repo = Path(analysis.repo_path)
-    cached = {row.source: row.key for row in cache.summaries() if row.repo_path == str(repo)}
-    if request.app.state.read_only:
-        return [
-            SourceOption(
-                source=source,
-                label=SOURCE_LABELS[source],
-                key=cached.get(source),
-                ready=source in cached,
-                reason=None if source in cached else "not built on this server",
-            )
-            for source in ("imports", "graphify-imports", "graphify-all")
-        ]
-    graphify_ready = graphify.has_artifact(repo)
-    return [
-        SourceOption(
-            source=source,
-            label=SOURCE_LABELS[source],
-            key=cached.get(source),
-            ready=True if source == "imports" else graphify_ready,
-            reason=None
-            if source == "imports" or graphify_ready
-            else f"no {graphify.ARTIFACT} in this repo",
-        )
-        for source in ("imports", "graphify-imports", "graphify-all")
-    ]
 
 
 @operator.post("/api/clone")
@@ -294,28 +225,22 @@ def run_analysis(request: AnalyzeRequest) -> AnalyzeResponse:
     )
 
     try:
-        existing = None if request.refresh else cache.load(repo, request.source)
+        existing = None if request.refresh else cache.load(repo)
     except StaleArtifactError:
         existing = None  # a stale artifact is simply re-analysed here
     if existing is not None:
         return AnalyzeResponse(
-            key=cache.repo_key(repo, request.source),
+            key=cache.repo_key(repo),
             summary=_summary_of(existing),
             stats_duration_ms=existing.stats.duration_ms,
             from_cache=True,
             update=update,
         )
 
-    if request.source == "imports":
-        result = analyze(repo)
-    else:
-        try:
-            result = graphify.load(repo, request.source, scope=graphify.ensure_scope(repo))
-        except GraphifyArtifactError as error:
-            raise HTTPException(status_code=404, detail=str(error)) from error
+    result = analyze(repo)
     cache.write(result)
     return AnalyzeResponse(
-        key=cache.repo_key(repo, request.source),
+        key=cache.repo_key(repo),
         summary=_summary_of(result),
         stats_duration_ms=result.stats.duration_ms,
         from_cache=False,
@@ -391,7 +316,7 @@ def _view(
 
 @reads.get("/api/graphify-status/{key}")
 def graphify_status(key: str, request: Request) -> GraphifyPageStatus:
-    """Can graphify's own page be shown for this repo, and if not, what builds it."""
+    """Can the symbol graph be shown for this repo, and if not, what builds it."""
     return _page_status(_require(key), request)
 
 
@@ -400,73 +325,17 @@ def _page_status(analysis: Analysis, request: Request) -> GraphifyPageStatus:
     if not ready and request.app.state.read_only:
         # The operator's remedy names a host path and a command visitors
         # cannot run, so a read-only server says only that it is absent.
-        reason = "graphify did not write its own page for this repo on this server."
+        reason = "No symbol graph was built for this repo on this server."
     return GraphifyPageStatus(ready=ready, reason=reason)
-
-
-@reads.get("/api/graphify-files-status/{key}")
-def graphify_files_status(key: str, request: Request) -> GraphifyPageStatus:
-    """Can the file-level graphify rendering be shown for this analysis.
-
-    The page builds on demand from the cached analysis, so readiness is only
-    whether graphify's renderer is installed at all.
-    """
-    _require(key)
-    if request.app.state.read_only:
-        # Building the page runs graphify and writes beside the cache, so the
-        # route that does it is an operator route and is not registered here.
-        return GraphifyPageStatus(
-            ready=False, reason="graphify's renderer is not offered on this server."
-        )
-    if graphify_page.binary() is None:
-        return GraphifyPageStatus(
-            ready=False,
-            reason="the `graphify` binary is not on PATH, so its renderer cannot run here.",
-        )
-    return GraphifyPageStatus(ready=True, reason=None)
-
-
-@operator.get("/api/graphify-files/{key}")
-def graphify_files_html(
-    key: str,
-    exclude: list[str] = Query(default=[]),  # noqa: B008 - FastAPI's parameter idiom
-    include_tests: bool = False,
-    include_type_only: bool = True,
-    exclude_ext: list[str] = Query(default=[]),  # noqa: B008 - FastAPI's parameter idiom
-) -> Response:
-    """This analysis drawn by graphify's own exporter: files only, no symbols.
-
-    Built on demand through `graphify export html` over a synthesized
-    file-level graph, and rebuilt whenever the analysis artifact is newer
-    than the page. Same renderer as graphify's own page, same partition and
-    labels as our tabs. The shape parameters are the same four `/api/graph`
-    takes, and the keep set comes from the same `build_view`, so this pane
-    and ours always agree about what a filter means; only the membership of
-    the exported page is filtered, never re-exported.
-    """
-    analysis = _require(key)
-    try:
-        html = graphify_files.filtered_html(
-            key,
-            analysis,
-            excluded=frozenset(exclude),
-            include_tests=include_tests,
-            include_type_only=include_type_only,
-            excluded_extensions=frozenset(
-                ext.lower().lstrip(".") for ext in exclude_ext if ext.strip(" .")
-            ),
-        )
-    except (GraphifyFilesError, GraphifyPageError) as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    return Response(content=html, media_type="text/html")
 
 
 @reads.get("/api/graphify-page/{key}")
 def graphify_page_html(key: str, request: Request) -> FileResponse:
-    """graphify's `graph.html`, byte for byte as its own pipeline wrote it.
+    """The symbol graph: graphify's `graph.html`, byte for byte as its pipeline wrote it.
 
-    Served, never re-rendered: importing its data into our renderer would make
-    this a fourth extractor tab, not the rendering comparison it is.
+    Served, never re-rendered. This tool extracts files and imports only, so
+    symbols are graphify's data drawn by graphify's page, and nothing here
+    pretends otherwise.
     """
     analysis = _require(key)
     page = graphify_page.page_path(Path(analysis.repo_path))
@@ -545,9 +414,9 @@ def get_license(key: str, path: str | None = None) -> RepoLicense:
     return licensing.find(Path(analysis.repo_path), path)
 
 
-# graphify's pages are framed by this app on the same origin, so they opt out of
+# graphify's page is framed by this app on the same origin, so it opts out of
 # the blanket DENY. SAMEORIGIN still refuses any other site.
-_FRAMED = ("/api/graphify-page/", "/api/graphify-files/")
+_FRAMED = "/api/graphify-page/"
 
 
 def create_app(*, read_only: bool) -> FastAPI:

@@ -5,13 +5,10 @@ import dynamic from "next/dynamic";
 import { useCallback } from "react";
 
 import { useGraphShape } from "@/features/filters/filterStore";
-import { GraphifyFiles } from "@/features/graph/GraphifyFiles";
-import { GraphifyPage } from "@/features/graph/GraphifyPage";
+import { SymbolGraph } from "@/features/graph/SymbolGraph";
 import { MapCanvas } from "@/features/map/MapCanvas";
 import { RendererTabs, isFramed, type Renderer } from "@/features/repo/RendererTabs";
-import { SourceTabs } from "@/features/repo/SourceTabs";
 import { api } from "@/lib/api";
-import type { RepoSummary } from "@/generated/contracts";
 
 /**
  * The canvas never renders on the server. Same reason as the primary pane's
@@ -24,32 +21,27 @@ const GraphCanvas = dynamic(
 );
 
 /**
- * One half of the split view: its own extractor key and its own renderer, so
- * any two drawings of the repo can sit side by side -- ours against graphify's
- * page, or two extractors through the same renderer.
+ * One half of the split view: the repo on screen, through its own renderer, so
+ * any two drawings of it sit side by side -- the import graph against the
+ * folders, or the files against the symbols.
  *
  * Queries are keyed exactly like the primary pane's, so a pane showing what
  * the other already fetched is a cache hit, not a second clustering. The
- * sidebar filters stay global: one filter state feeds every ours-pane at
- * once, which is what makes the two halves comparable rather than merely
- * adjacent.
+ * sidebar filters stay global: one filter state feeds both panes at once,
+ * which is what makes the two halves comparable rather than merely adjacent.
  */
 export function ComparePane({
   paneKey,
   renderer,
-  onKey,
   onRenderer,
   onOpenFile,
 }: {
   paneKey: string | null;
   renderer: Renderer;
-  onKey: (summary: RepoSummary) => void;
   onRenderer: (renderer: Renderer) => void;
   onOpenFile: (path: string, key: string) => void;
 }) {
   const { shape, settling } = useGraphShape();
-  const repos = useQuery({ queryKey: ["repos"], queryFn: api.repos });
-  const active = repos.data?.find((row) => row.key === paneKey) ?? null;
 
   // Stable per key: an inline arrow would remount the canvas every render.
   const onOpenPaneFile = useCallback(
@@ -71,30 +63,25 @@ export function ComparePane({
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel px-2 py-1">
-        {active ? (
-          <>
-            <SourceTabs active={active} onPick={onKey} />
-            <RendererTabs analysisKey={active.key} renderer={renderer} onRenderer={onRenderer} />
-          </>
+        {paneKey ? (
+          <RendererTabs analysisKey={paneKey} renderer={renderer} onRenderer={onRenderer} />
         ) : (
           <span className="px-1 text-[11.5px] text-faint italic">Pick a repo above.</span>
         )}
       </div>
       <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-        {renderer === "graphify" && paneKey ? (
-          <GraphifyPage analysisKey={paneKey} />
-        ) : renderer === "graphify-files" && paneKey ? (
-          <GraphifyFiles analysisKey={paneKey} />
+        {renderer === "symbol-graph" && paneKey ? (
+          <SymbolGraph analysisKey={paneKey} />
         ) : (
           <>
-            {view && renderer === "ours" ? (
+            {view && renderer === "import-graph" ? (
               <GraphCanvas view={view} onOpenFile={onOpenPaneFile} />
             ) : null}
-            {view && renderer !== "ours" ? (
+            {view && renderer !== "import-graph" ? (
               <MapCanvas
                 view={view}
-                sizing={renderer === "map-lines" ? "lines" : "files"}
-                edges={renderer === "map-edges"}
+                sizing={renderer === "folders-size" ? "lines" : "files"}
+                edges={renderer === "folders-imports"}
                 onOpenFile={onOpenPaneFile}
               />
             ) : null}

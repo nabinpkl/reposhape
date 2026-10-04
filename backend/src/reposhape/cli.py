@@ -18,16 +18,15 @@ from typing import Annotated
 
 import typer
 
-from reposhape import cache, cloning, daemon, graphify, graphify_page, launching, web_bundle
+from reposhape import cache, cloning, daemon, graphify_page, launching, web_bundle
 from reposhape.analysis import analyze
 from reposhape.cache import StaleArtifactError
 from reposhape.cloning import CloneError
 from reposhape.configuration import settings
-from reposhape.graphify import GraphifyArtifactError
 from reposhape.graphify_page import GraphifyPageError
 from reposhape.graphing import build_view
 from reposhape.launching import LaunchError
-from reposhape.models import Analysis, AnalysisSource
+from reposhape.models import Analysis
 
 app = typer.Typer(
     add_completion=False,
@@ -82,20 +81,7 @@ def _progress_reporter() -> object:
     return report
 
 
-SourceOption = Annotated[
-    AnalysisSource,
-    typer.Option(
-        "--source",
-        help="Which extractor's graph. `imports` is this tool's own; the graphify "
-        "sources project that tool's symbol graph onto files, for comparison.",
-    ),
-]
-
-
-def _build(repo: Path, source: AnalysisSource, *, quiet: bool) -> Analysis:
-    """Run whichever extractor `source` names. One dispatch, used everywhere."""
-    if source != "imports":
-        return graphify.load(repo, source, scope=graphify.ensure_scope(repo))
+def _build(repo: Path, *, quiet: bool) -> Analysis:
     progress = (lambda *_: None) if quiet else _progress_reporter()
     return analyze(repo, progress=progress)  # ty: ignore[invalid-argument-type]
 
@@ -110,7 +96,7 @@ def _update_line(result: cloning.UpdateResult) -> str:
             return f"not fetched: {result.detail}"
 
 
-def _ensure_analysis(repo: Path, source: AnalysisSource, *, refresh: bool, quiet: bool) -> Analysis:
+def _ensure_analysis(repo: Path, *, refresh: bool, quiet: bool) -> Analysis:
     """The cached analysis for `repo`, running one if there is not a usable one.
 
     A stale artifact is re-analysed rather than reported: artifacts are a cache,
@@ -128,7 +114,7 @@ def _ensure_analysis(repo: Path, source: AnalysisSource, *, refresh: bool, quiet
             _stderr(_update_line(moved))
 
     try:
-        existing = None if refresh else cache.load(repo, source)
+        existing = None if refresh else cache.load(repo)
     except StaleArtifactError as error:
         _stderr(f"{error}")
         existing = None
@@ -141,7 +127,7 @@ def _ensure_analysis(repo: Path, source: AnalysisSource, *, refresh: bool, quiet
         )
         return existing
 
-    result = _build(repo, source, quiet=quiet)
+    result = _build(repo, quiet=quiet)
     cache.write(result)
     stats = result.stats
     _stderr(
@@ -188,7 +174,7 @@ def clone(
         # A checkout that was already here is refreshed, because asking for a
         # URL is asking for that repository now. A fresh one has nothing to
         # fetch and nothing cached.
-        _ensure_analysis(result.path, "imports", refresh=result.already_present, quiet=quiet)
+        _ensure_analysis(result.path, refresh=result.already_present, quiet=quiet)
     except (NotADirectoryError, OSError) as error:
         _stderr(f"error: {error}")
         raise typer.Exit(code=1) from error
@@ -205,7 +191,6 @@ def up(
             "Without one, opens the repo picker."
         ),
     ] = None,
-    source: SourceOption = "imports",
     refresh: Annotated[
         bool, typer.Option("--refresh", help="Re-analyse even if a cached artifact exists.")
     ] = False,
@@ -249,8 +234,8 @@ def up(
             _stderr(f"error: not a directory: {repo}")
             raise typer.Exit(code=1)
         try:
-            analysis = _ensure_analysis(root, source, refresh=refresh, quiet=quiet)
-        except (NotADirectoryError, OSError, GraphifyArtifactError) as error:
+            analysis = _ensure_analysis(root, refresh=refresh, quiet=quiet)
+        except (NotADirectoryError, OSError) as error:
             _stderr(f"error: {error}")
             raise typer.Exit(code=1) from error
 
@@ -261,7 +246,7 @@ def up(
         raise typer.Exit(code=1) from error
 
     if root is not None and analysis is not None:
-        url = launching.graph_url(origin, cache.repo_key(root, source))
+        url = launching.graph_url(origin, cache.repo_key(root))
         print(
             f"\n  repo  {root}  ({len(analysis.files):,} files, {len(analysis.edges):,} edges)\n"
             f"  open  {url}\n"
@@ -301,7 +286,6 @@ def down() -> None:
 @app.command()
 def analyze_repo(
     repo: Annotated[Path, typer.Argument(help="Repository to analyse.")],
-    source: SourceOption = "imports",
     out: Annotated[
         str | None,
         typer.Option("--out", "-o", help="Write here instead of the cache. '-' for stdout."),
@@ -315,8 +299,8 @@ def analyze_repo(
         _stderr(f"error: {repo} is a URL. Run: reposhape clone {repo}")
         raise typer.Exit(code=1)
     try:
-        result = _build(repo, source, quiet=quiet)
-    except (NotADirectoryError, OSError, GraphifyArtifactError) as error:
+        result = _build(repo, quiet=quiet)
+    except (NotADirectoryError, OSError) as error:
         _stderr(f"error: {error}")
         raise typer.Exit(code=1) from error
 
@@ -366,44 +350,25 @@ def view(
 
 @app.command("graphify-page")
 def graphify_page_cmd(
-    repo: Annotated[Path, typer.Argument(help="Repository to render with graphify.")] = Path("."),
-    refresh: Annotated[
-        bool, typer.Option("--refresh", help="Re-emit the page even if one exists.")
-    ] = False,
-) -> None:
-    """Build graphify's own page for a repo, with graphify's own pipeline.
-
-    This is the write side of the rendering comparison: `graphify update` from
-    scratch, `graphify export html` when the extraction already exists. The
-    browser reads the result through `GET /api/graphify-page`, byte for byte.
-    """
-    root = launching.repo_root_of(repo)
-    if not root.is_dir():
-        _stderr(f"error: not a directory: {repo}")
-        raise typer.Exit(code=1)
-    try:
-        page = graphify_page.ensure(root, refresh=refresh)
-    except GraphifyPageError as error:
-        _stderr(f"error: {error}")
-        raise typer.Exit(code=1) from error
-    _stderr(f"wrote {page}")
-
-
-@app.command("graphify-extract")
-def graphify_extract_cmd(
     repo: Annotated[
         str,
-        typer.Argument(help="Repository to extract: a path, or the git URL it was cloned from."),
-    ],
+        typer.Argument(
+            help="Repository to build the symbol graph for: a path, or the git URL it was "
+            "cloned from."
+        ),
+    ] = ".",
+    refresh: Annotated[
+        bool, typer.Option("--refresh", help="Re-run graphify's extraction, then the page.")
+    ] = False,
 ) -> None:
-    """Run graphify's LLM-free extraction on a repo and cache both projections.
+    """Build the symbol graph for a repo, with graphify's own pipeline.
 
-    What puts the graphify tabs on a read-only server, which builds nothing on
-    request: `graphify update`, then the `graphify-imports` and `graphify-all`
-    projections written to the cache like any other analysis. The repo's own
-    `imports` analysis is the projections' scope, so it is built first if it is
-    not cached. graphify's own page comes along only when graphify wrote one.
-    A URL names the checkout `reposhape clone` made of it and never clones.
+    Symbols are graphify's data, so this drives the `graphify` binary: its
+    LLM-free `graphify update` from scratch, `graphify export html` when only
+    the page is missing. The browser's `symbol graph` tab serves the result
+    byte for byte. A read-only server builds nothing on request, so this is
+    also how its tab gets a page. A URL names the checkout `reposhape clone`
+    made of it and never clones.
     """
     if cloning.looks_remote(repo):
         try:
@@ -420,24 +385,11 @@ def graphify_extract_cmd(
         _stderr(f"error: not a directory: {repo}")
         raise typer.Exit(code=1)
     try:
-        graphify_page.extract(root)
+        page = graphify_page.ensure(root, refresh=refresh)
     except GraphifyPageError as error:
         _stderr(f"error: {error}")
         raise typer.Exit(code=1) from error
-    scope = graphify.ensure_scope(root)
-    for source in ("graphify-imports", "graphify-all"):
-        result = graphify.load(root, source, scope=scope)
-        written = cache.write(result)
-        _stderr(f"wrote {written}: {len(result.files)} files, {result.stats.edges} edges")
-    ready, _ = graphify_page.status_of(root)
-    _stderr(
-        "graphify's page: "
-        + (
-            "written"
-            if ready
-            else "not written (graphify skips it for a graph past its node limit)"
-        )
-    )
+    _stderr(f"wrote {page}")
 
 
 @app.command()
@@ -463,7 +415,7 @@ def forget(
         Path, typer.Argument(help="Repository to forget, as `reposhape repos` prints it.")
     ],
 ) -> None:
-    """Take a repository out of the cache: every source's artifact and its graphify pages.
+    """Take a repository's analysis out of the cache.
 
     The same removal as the browser's Forget. The path is not resolved through
     git and need not exist, because a repository that has been deleted or moved

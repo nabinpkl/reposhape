@@ -18,7 +18,7 @@ import type {
 } from "@/features/graph/graphModel";
 
 /**
- * Curved edges for the ours renderer. Sigma 3.0.3 ships only straight edge
+ * Curved edges for the import graph. Sigma 3.0.3 ships only straight edge
  * programs (line, arrow, rectangle, triangle, clamped), so the body is ours,
  * built on its instancing machinery: per-edge attributes carry the quadratic
  * bezier (source, control, target) and per-vertex constants carry (t, side),

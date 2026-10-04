@@ -19,23 +19,9 @@ from pydantic import BaseModel, Field
 # Bumped when the artifact's shape changes. There is no migration path by
 # design: artifacts are cheap to regenerate and a migration is a second
 # reader of a format nobody has yet had to live with.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
-# "other" exists only for imported analyses. This tool's own extractor emits
-# the four it can parse; graphify's covers Swift, Rust, shell and Markdown,
-# and a file whose language we do not model is still a node in its graph.
-Language = Literal["typescript", "javascript", "vue", "python", "other"]
-
-# Where an analysis came from. The point of naming it is comparison: the same
-# renderer and the same clustering over a different extractor's edges is the
-# only way to tell a difference in the picture from a difference in the tool.
-AnalysisSource = Literal["imports", "graphify-imports", "graphify-all"]
-
-SOURCE_LABELS: dict[AnalysisSource, str] = {
-    "imports": "ours",
-    "graphify-imports": "graphify imports",
-    "graphify-all": "graphify all edges",
-}
+Language = Literal["typescript", "javascript", "vue", "python"]
 
 ImportKind = Literal["static", "export_from", "dynamic", "require", "from_import"]
 
@@ -154,7 +140,6 @@ class Analysis(BaseModel):
     """The artifact. Written by the CLI, read by the server."""
 
     schema_version: int = SCHEMA_VERSION
-    source: AnalysisSource = "imports"
     repo_path: str
     repo_name: str
     git_sha: str | None = None
@@ -175,9 +160,7 @@ class Analysis(BaseModel):
     )
     stats: AnalysisStats
     links: list[RuntimeLink] = Field(default_factory=list)
-    link_stats: LinkStats | None = Field(
-        default=None, description="Null for an imported analysis, which has no runtime-link pass."
-    )
+    link_stats: LinkStats
 
 
 class Cluster(BaseModel):
@@ -228,7 +211,6 @@ class RepoSummary(BaseModel):
     """One row in the repo picker. This is the cache's read path."""
 
     key: str
-    source: AnalysisSource
     repo_path: str
     repo_name: str
     git_sha: str | None
@@ -307,28 +289,13 @@ class FolderListing(BaseModel):
     )
 
 
-class SourceOption(BaseModel):
-    """One extractor this repo could be graphed with. One tab in the browser.
-
-    `key` present means the artifact is already cached and switching is a click.
-    `ready` false means this source cannot be built here at all, and `reason`
-    says why, so the tab can explain itself instead of failing when clicked.
-    """
-
-    source: AnalysisSource
-    label: str
-    key: str | None = None
-    ready: bool = True
-    reason: str | None = None
-
-
 class GraphifyPageStatus(BaseModel):
-    """Whether graphify's own page can be shown for this repo. The tab's read path.
+    """Whether the symbol graph can be shown for this repo. The tab's read path.
 
-    The page is not an analysis -- it is graphify's `graph.html` served
-    verbatim -- so it has no cache key and no place in `SourceOption`. `ready`
-    false carries the CLI command that would make it ready, rather than a tab
-    that fails when clicked.
+    The symbol graph is graphify's own `graph.html`, served verbatim: this tool
+    extracts files and imports only, and symbols are graphify's. It is not an
+    analysis, so it has no cache key. `ready` false carries the CLI command
+    that would make it ready, rather than a tab that fails when clicked.
     """
 
     ready: bool

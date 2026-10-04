@@ -185,7 +185,9 @@ release-repos: _deploy-config
 # `exec` into the service: hermes-agent's graph (240k symbols, a 314 MB
 # graph.json) peaks near 4 GB, and the service is capped at 1 GB for the reason
 # compose.release.yaml gives. One repo at a time, because the host is in swap.
-# graphify's LLM-free extraction and both projections for every curated repo.
+# graphify's LLM-free extraction and its page, the symbol graph tab, for every
+# curated repo. A repo past graphify's node limit gets no page; that is
+# reported and the loop moves on, because the other repos' pages still count.
 release-graphify: _deploy-config
     ssh {{deploy_host}} 'set -eu; cd {{deploy_dir}}; \
       set -a; . ops/deployments/hosted.env; set +a; \
@@ -195,7 +197,8 @@ release-graphify: _deploy-config
           --env-file ops/deployments/hosted.env \
           -v reposhape-clones:/data/clones -v reposhape-cache:/data/cache \
           -v "$PWD/ops/link-rules:/etc/reposhape/links:ro" \
-          reposhape:"$DEPLOY_RELEASE" reposhape graphify-extract "$url" < /dev/null; \
+          reposhape:"$DEPLOY_RELEASE" reposhape graphify-page "$url" --refresh < /dev/null \
+          || echo "   no symbol graph for $url"; \
       done'
 
 # Publish on the tailnet through Tailscale Serve. Serve, not Funnel: Funnel is

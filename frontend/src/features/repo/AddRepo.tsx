@@ -79,7 +79,7 @@ export function AddRepo({ onPick }: { onPick: (summary: RepoSummary) => void }) 
   const health = useQuery({ queryKey: ["health"], queryFn: api.health, enabled: open && remote });
 
   const analyze = useMutation({
-    mutationFn: (repoPath: string) => api.analyze(repoPath, "imports", false),
+    mutationFn: (repoPath: string) => api.analyze(repoPath),
     onSuccess: async (response) => {
       await invalidateAnalysis(queryClient, response.key);
       onPick(response.summary);
@@ -94,7 +94,7 @@ export function AddRepo({ onPick }: { onPick: (summary: RepoSummary) => void }) 
       setStage("analysing");
       // A checkout that was already here is refreshed, because asking for a URL
       // is asking for that repository now rather than as it was downloaded.
-      return api.analyze(cloned.path, "imports", cloned.already_present);
+      return api.analyze(cloned.path, cloned.already_present);
     },
     onSuccess: async (response) => {
       await invalidateAnalysis(queryClient, response.key);

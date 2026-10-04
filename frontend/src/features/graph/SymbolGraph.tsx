@@ -5,23 +5,21 @@ import { useQuery } from "@tanstack/react-query";
 import { api, graphifyPageUrl } from "@/lib/api";
 
 /**
- * graphify's own page, framed verbatim.
+ * The symbol graph: graphify's own page, framed verbatim.
  *
- * This is the rendering half of the comparison: the extractor tabs draw
- * graphify's edges through our sigma renderer so only the extractor differs;
- * this tab draws graphify's output through graphify's vis-network page so only
- * the rendering differs. Our filters, focus and file pane do not apply here --
- * the page carries its own sidebar, legend and physics -- so the sidebar says
- * so instead of offering controls that do nothing.
+ * This tool extracts files and imports; symbols are graphify's data, drawn by
+ * graphify's vis-network page. Our filters, focus and file pane do not apply
+ * here -- the page carries its own sidebar, legend and physics -- so the
+ * sidebar says so instead of offering controls that do nothing.
  */
-export function GraphifyPage({ analysisKey }: { analysisKey: string }) {
+export function SymbolGraph({ analysisKey }: { analysisKey: string }) {
   const status = useQuery({
     queryKey: ["graphify-status", analysisKey],
     queryFn: () => api.graphifyStatus(analysisKey),
   });
 
   if (status.isPending) {
-    return <PageNote>Checking for graphify&apos;s page…</PageNote>;
+    return <PageNote>Checking for a symbol graph…</PageNote>;
   }
   if (status.error) {
     return <PageNote tone="error">{(status.error as Error).message}</PageNote>;
@@ -29,14 +27,14 @@ export function GraphifyPage({ analysisKey }: { analysisKey: string }) {
   if (!status.data.ready) {
     return (
       <PageNote>
-        {status.data.reason ?? "graphify's page is not built for this repo."}
+        {status.data.reason ?? "No symbol graph is built for this repo."}
       </PageNote>
     );
   }
 
   return (
     <iframe
-      title="graphify's own graph page"
+      title="Symbol graph, drawn by graphify"
       src={graphifyPageUrl(analysisKey)}
       sandbox="allow-scripts"
       className="absolute inset-0 h-full w-full border-0"

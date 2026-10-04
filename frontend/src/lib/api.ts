@@ -1,7 +1,6 @@
 import { config } from "@/lib/config";
 import type {
   Analysis,
-  AnalysisSource,
   FileContents,
   FolderListing,
   GraphifyPageStatus,
@@ -11,7 +10,6 @@ import type {
   RuntimeLink,
   RepoPaths,
   RepoSummary,
-  SourceOption,
 } from "@/generated/contracts";
 
 /**
@@ -94,16 +92,15 @@ export const api = {
     }),
 
   /**
-   * Take a repository out of the picker: its artifact for every source, and the
-   * pages drawn from each. Answers with every key removed, which is what a
-   * caller needs to move off whichever of them is on screen.
+   * Take a repository out of the picker. Answers with every key removed, which
+   * is what a caller needs to move off it if it is on screen.
    */
   forget: (key: string) => request<string[]>(`/api/repos/${key}`, { method: "DELETE" }),
 
-  analyze: (repoPath: string, source: AnalysisSource = "imports", refresh = false) =>
+  analyze: (repoPath: string, refresh = false) =>
     request<AnalyzeResponse>("/api/analyze", {
       method: "POST",
-      body: JSON.stringify({ repo_path: repoPath, source, refresh }),
+      body: JSON.stringify({ repo_path: repoPath, refresh }),
     }),
 
   /**
@@ -113,9 +110,6 @@ export const api = {
    */
   folders: (path: string) =>
     request<FolderListing>(`/api/folders?path=${encodeURIComponent(path)}`),
-
-  /** Which extractors this repo can be graphed with, and which are already built. */
-  sources: (key: string) => request<SourceOption[]>(`/api/sources/${key}`),
 
   analysis: (key: string) => request<Analysis>(`/api/analysis/${key}`),
 
@@ -139,22 +133,13 @@ export const api = {
   license: (key: string, path: string) =>
     request<RepoLicense>(`/api/license/${key}?path=${encodeURIComponent(path)}`),
 
-  /** Can graphify's own page be shown for this repo, and what builds it. */
+  /** Can the symbol graph be shown for this repo, and what builds it. */
   graphifyStatus: (key: string) => request<GraphifyPageStatus>(`/api/graphify-status/${key}`),
-
-  /** Can the file-level graphify rendering be shown for this analysis. */
-  graphifyFilesStatus: (key: string) =>
-    request<GraphifyPageStatus>(`/api/graphify-files-status/${key}`),
 };
 
-/** graphify's `graph.html` as its own pipeline wrote it. Same-origin, so it frames. */
+/** The symbol graph: graphify's `graph.html` as its pipeline wrote it. Same-origin, so it frames. */
 export function graphifyPageUrl(key: string): string {
   return `/api/graphify-page/${key}`;
-}
-
-/** This analysis drawn by graphify's own exporter. Same-origin, so it frames. */
-export function graphifyFilesUrl(key: string, shape: GraphShape): string {
-  return `/api/graphify-files/${key}?${shapeParams(shape)}`;
 }
 
 /** The server-side half of the filter model. See features/filters/filterStore. */
@@ -165,8 +150,8 @@ export interface GraphShape {
   excludedExtensions: string[];
 }
 
-/** One serializer for every shape-carrying URL: ours and graphify files. */
-export function shapeParams(shape: GraphShape): URLSearchParams {
+/** The query string for a shape, as `/api/graph` reads it. */
+function shapeParams(shape: GraphShape): URLSearchParams {
   const params = new URLSearchParams();
   for (const path of shape.excluded) params.append("exclude", path);
   for (const ext of shape.excludedExtensions) params.append("exclude_ext", ext);

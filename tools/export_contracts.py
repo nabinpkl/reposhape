@@ -50,7 +50,7 @@ def _render() -> str:
 
     # Literal aliases are derived the same way and for the same reason: the
     # three that used to be listed here by hand were the three that existed the
-    # day this was written, and `AnalysisSource` was added without anyone
+    # day this was written, and a fourth was added later without anyone
     # noticing the list.
     from typing import Literal, get_origin
 

@@ -10,9 +10,8 @@ import { ExtensionFilter } from "@/features/filters/ExtensionFilter";
 import { PathFilter } from "@/features/filters/PathFilter";
 import { ShapeControls } from "@/features/filters/ShapeControls";
 import { useFilters, useGraphShape } from "@/features/filters/filterStore";
-import { GraphifyFiles } from "@/features/graph/GraphifyFiles";
-import { GraphifyPage } from "@/features/graph/GraphifyPage";
 import { NodeInfo } from "@/features/graph/NodeInfo";
+import { SymbolGraph } from "@/features/graph/SymbolGraph";
 import type { EdgeSummary } from "@/features/map/mapEdges";
 import { MapCanvas } from "@/features/map/MapCanvas";
 import { isFramed } from "@/features/repo/RendererTabs";
@@ -68,13 +67,11 @@ export function Workspace() {
   const readOnly = useReadOnly();
   const [pickedKey, setPickedKey] = useState<string | null | undefined>(undefined);
   const [openFile, setOpenFile] = useState<{ key: string; path: string } | null>(null);
-  const [renderer, setRenderer] = useState<Renderer>("ours");
-  // Split view: the right pane follows the primary key until its own source is
-  // picked, so opening split on a repo compares that repo with itself. A null
-  // right key means "follow", never "empty".
+  const [renderer, setRenderer] = useState<Renderer>("import-graph");
+  // Split view: two drawings of the repo on screen. The right pane opens on
+  // the folders with their imports, which needs nothing beyond this tool.
   const [split, setSplit] = useState(false);
-  const [rightKey, setRightKey] = useState<string | null>(null);
-  const [rightRenderer, setRightRenderer] = useState<Renderer>("graphify");
+  const [rightRenderer, setRightRenderer] = useState<Renderer>("folders-imports");
   // Drawer state for the phone: below md the sidebar is off-canvas until
   // this opens it. Desktop never reads it; the grid cell is always there.
   const [sidebarOpen, setSidebarOpen] = useState(false);  // The inspector lives behind a header toggle: a permanent third column
@@ -140,28 +137,25 @@ export function Workspace() {
     window.history.replaceState(null, "", url);
   }, []);
 
+  // The renderer survives the pick: every tab, the symbol graph included, is a
+  // drawing of whichever repo is open, and dropping a reader back onto the
+  // import graph every time they change repo would undo their choice.
   const onPickRepo = useCallback(
     (summary: RepoSummary) => {
       setPickedKey(summary.key);
       setOpenFile(null);
-      // A framed page belongs to the repo it was built for, so it cannot
-      // survive the pick. Our own renderers can, and dropping a reader back
-      // onto the graph every time they change repo would undo their choice.
-      if (isFramed(renderer)) setRenderer("ours");
       setSidebarOpen(false);
       clearView();
       clearDimmed();
       writeUrl(summary.key);
     },
-    [clearView, clearDimmed, renderer, writeUrl],
+    [clearView, clearDimmed, writeUrl],
   );
 
-  // Forgetting can take the repo on screen, the right pane's source, or the file
-  // open in the inspector, and each has to let go of a key that now 404s. The
-  // right pane falls back to following, which is what null means there.
+  // Forgetting can take the repo on screen or the file open in the inspector,
+  // and each has to let go of a key that now 404s.
   const onForget = useCallback(
     (removed: string[], next: RepoSummary | null) => {
-      setRightKey((key) => (key !== null && removed.includes(key) ? null : key));
       setOpenFile((file) => (file && removed.includes(file.key) ? null : file));
       if (analysisKey === null || !removed.includes(analysisKey)) return;
       if (next) {
@@ -169,41 +163,13 @@ export function Workspace() {
         return;
       }
       setPickedKey(null);
-      if (isFramed(renderer)) setRenderer("ours");
       clearView();
       clearDimmed();
       const url = new URL(window.location.href);
       url.searchParams.delete("repo");
       window.history.replaceState(null, "", url);
     },
-    [analysisKey, clearView, clearDimmed, onPickRepo, renderer],
-  );
-
-  // A source switch inside a pane picks data, and data draws through one of
-  // our renderers: leaving a pane on the graphify page would answer the click
-  // with the same framed artifact, a silent no-op. The map and the graph both
-  // redraw from the new source, so neither is disturbed.
-  const onPickSource = useCallback(
-    (summary: RepoSummary) => {
-      setPickedKey(summary.key);
-      if (isFramed(renderer)) setRenderer("ours");
-      setOpenFile(null);
-      clearView();
-      clearDimmed();
-      writeUrl(summary.key);
-    },
-    [clearView, clearDimmed, renderer, writeUrl],
-  );
-
-  const onPickRightSource = useCallback(
-    (summary: RepoSummary) => {
-      setRightKey(summary.key);
-      if (isFramed(rightRenderer)) setRightRenderer("ours");
-      setOpenFile(null);
-      clearView();
-      clearDimmed();
-    },
-    [clearView, clearDimmed, rightRenderer],
+    [analysisKey, clearView, clearDimmed, onPickRepo],
   );
 
   const onOpenFile = useCallback(
@@ -236,10 +202,9 @@ export function Workspace() {
   }, [openFile, clearView, sidebarOpen]);
 
   const view = graph.data;
-  // Either framed renderer hides the sidebar controls: both carry their own
+  // The framed symbol graph hides the sidebar controls: it carries its own
   // sidebar and legend, so our filters, focus and file pane do not apply.
   const framed = isFramed(renderer) && analysisKey !== null;
-  const rightPaneKey = rightKey ?? analysisKey;
   const asideContent = openFile ? (
     <FileViewer
       analysisKey={openFile.key}
@@ -282,11 +247,10 @@ export function Workspace() {
       sidebar={
         framed ? (
           <>
-            <PaneHeading>{renderer === "graphify" ? "graphify page" : "graphify files"}</PaneHeading>
+            <PaneHeading>Symbol graph</PaneHeading>
             <p className="px-3 py-2 text-[12px] text-muted">
-              {renderer === "graphify"
-                ? "graphify's own rendering, framed verbatim. Our filters, focus and file pane do not apply here — the page carries its own sidebar and legend."
-                : "graphify's renderer over this analysis: files only, no symbols. Drawn on demand through its own exporter, with our partition and labels."}
+              Drawn by graphify, exactly as it wrote the page. The filters, focus and file
+              pane here do not reach into it; it carries its own sidebar and legend.
             </p>
           </>
         ) : (
@@ -327,35 +291,31 @@ export function Workspace() {
               <ComparePane
                 paneKey={analysisKey}
                 renderer={renderer}
-                onKey={onPickSource}
                 onRenderer={setRenderer}
                 onOpenFile={onOpenFile}
               />
             </div>
             <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
               <ComparePane
-                paneKey={rightPaneKey}
+                paneKey={analysisKey}
                 renderer={rightRenderer}
-                onKey={onPickRightSource}
                 onRenderer={setRightRenderer}
                 onOpenFile={onOpenFile}
               />
             </div>
           </div>
-        ) : renderer === "graphify" && analysisKey ? (
-          <GraphifyPage analysisKey={analysisKey} />
-        ) : renderer === "graphify-files" && analysisKey ? (
-          <GraphifyFiles analysisKey={analysisKey} />
+        ) : renderer === "symbol-graph" && analysisKey ? (
+          <SymbolGraph analysisKey={analysisKey} />
         ) : (
           <>
-          {view && renderer === "ours" ? (
+          {view && renderer === "import-graph" ? (
             <GraphCanvas view={view} onOpenFile={onOpenFilePrimary} />
           ) : null}
-          {view && renderer !== "ours" ? (
+          {view && renderer !== "import-graph" ? (
             <MapCanvas
               view={view}
-              sizing={renderer === "map-lines" ? "lines" : "files"}
-              edges={renderer === "map-edges"}
+              sizing={renderer === "folders-size" ? "lines" : "files"}
+              edges={renderer === "folders-imports"}
               onOpenFile={onOpenFilePrimary}
               onDismiss={onDismissFile}
               onSummary={setEdgeSummary}

@@ -10,12 +10,11 @@ import { invalidateAnalysis } from "@/features/repo/analysisCache";
 import { RendererTabs, type Renderer } from "@/features/repo/RendererTabs";
 import { RepoMenu } from "@/features/repo/RepoMenu";
 import { useReadOnly } from "@/features/repo/serverMode";
-import { SourceTabs } from "@/features/repo/SourceTabs";
 import { ThemeToggle } from "@/features/theme/ThemeToggle";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/class-names";
 import type { UpdateReport } from "@/lib/api";
-import type { AnalysisSource, RepoSummary } from "@/generated/contracts";
+import type { RepoSummary } from "@/generated/contracts";
 
 export type { Renderer };
 
@@ -48,7 +47,7 @@ export function RepoBar({
   onRenderer: (renderer: Renderer) => void;
   split: boolean;
   onSplit: (split: boolean) => void;
-  /** Hidden in split mode: each pane carries its own source and renderer tabs. */
+  /** Hidden in split mode: each pane carries its own tabs. */
   showTabs?: boolean;
   asideOpen: boolean;
   onAside: (open: boolean) => void;
@@ -67,15 +66,7 @@ export function RepoBar({
   const [update, setUpdate] = useState<UpdateReport | null>(null);
 
   const analyze = useMutation({
-    mutationFn: ({
-      repoPath,
-      source,
-      refresh,
-    }: {
-      repoPath: string;
-      source: AnalysisSource;
-      refresh: boolean;
-    }) => api.analyze(repoPath, source, refresh),
+    mutationFn: (repoPath: string) => api.analyze(repoPath, true),
     onMutate: () => setUpdate(null),
     onSuccess: async (response) => {
       // The artifact was written over its own key, so the graph, the path tree
@@ -160,9 +151,7 @@ export function RepoBar({
                 ? "Fetch and re-analyse"
                 : "Re-analyse from disk"
             }
-            onClick={() =>
-              analyze.mutate({ repoPath: active.repo_path, source: active.source, refresh: true })
-            }
+            onClick={() => analyze.mutate(active.repo_path)}
             disabled={analyze.isPending}
             className="shrink-0 rounded p-1 text-muted hover:bg-line hover:text-fg disabled:opacity-50"
           >
@@ -177,9 +166,7 @@ export function RepoBar({
         <ThemeToggle />
       </div>
 
-      <div className="flex w-full min-w-0 basis-full items-center gap-2 overflow-x-auto pb-0.5 md:w-auto md:basis-auto md:overflow-visible md:pb-0">
-        {showTabs && active ? <SourceTabs active={active} onPick={onPick} /> : null}
-
+      <div className="flex w-full min-w-0 basis-full flex-wrap items-center gap-2 md:w-auto md:basis-auto">
         {showTabs && active ? (
           <RendererTabs
             analysisKey={active.key}

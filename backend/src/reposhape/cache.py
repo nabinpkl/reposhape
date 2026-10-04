@@ -9,36 +9,30 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
 from contextlib import suppress
 from pathlib import Path
-from typing import get_args
 
-from reposhape import graphify_files
 from reposhape.configuration import settings
-from reposhape.models import SCHEMA_VERSION, Analysis, AnalysisSource, RepoSummary
+from reposhape.models import SCHEMA_VERSION, Analysis, RepoSummary
 
 
-def repo_key(repo_path: Path | str, source: AnalysisSource = "imports") -> str:
-    """Stable per-repo-per-source artifact name: readable stem plus a digest.
+def repo_key(repo_path: Path | str) -> str:
+    """Stable per-repo artifact name: readable stem plus a digest.
 
     The digest is what keeps two checkouts of the same project apart; the stem
-    is what makes the cache directory browsable by a human. The source suffix is
-    what lets this tool's graph of a repo and an imported one sit side by side
-    without either overwriting the other.
+    is what makes the cache directory browsable by a human.
     """
     resolved = Path(repo_path).expanduser().resolve()
     digest = hashlib.sha256(str(resolved).encode()).hexdigest()[:12]
-    suffix = "" if source == "imports" else f"-{source}"
-    return f"{resolved.name}-{digest}{suffix}"
+    return f"{resolved.name}-{digest}"
 
 
-def analysis_path(repo_path: Path | str, source: AnalysisSource = "imports") -> Path:
-    return settings.cache_root / f"{repo_key(repo_path, source)}.json"
+def analysis_path(repo_path: Path | str) -> Path:
+    return settings.cache_root / f"{repo_key(repo_path)}.json"
 
 
 def write(analysis: Analysis, destination: Path | None = None) -> Path:
-    target = destination or analysis_path(analysis.repo_path, analysis.source)
+    target = destination or analysis_path(analysis.repo_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     # Written beside the target and moved, so a reader never sees half a file.
     staging = target.with_suffix(".json.partial")
@@ -58,24 +52,35 @@ def read(path: Path) -> Analysis:
     answer differs: one needs `analyze-repo`, the other means the cache never
     had it. Returning None for both makes a schema bump look like an empty
     cache, which is the absence that sends you looking in the wrong place.
+
+    The version is checked even when the file parses. An older artifact can
+    still fit the current models, because unknown fields are ignored, and then
+    a bump would retire nothing.
     """
     raw = path.read_text(encoding="utf-8")
     try:
-        return Analysis.model_validate_json(raw)
+        analysis = Analysis.model_validate_json(raw)
     except ValueError as error:
         version = None
-        with suppress(ValueError, KeyError, TypeError):
+        with suppress(ValueError, KeyError, TypeError, AttributeError):
             version = json.loads(raw).get("schema_version")
         if version != SCHEMA_VERSION:
-            raise StaleArtifactError(
-                f"{path.name} is schema {version}, this build reads {SCHEMA_VERSION}. "
-                "Re-run the analysis; artifacts are regenerated, never migrated."
-            ) from error
+            raise _stale(path, version) from error
         raise
+    if analysis.schema_version != SCHEMA_VERSION:
+        raise _stale(path, analysis.schema_version)
+    return analysis
 
 
-def load(repo_path: Path | str, source: AnalysisSource = "imports") -> Analysis | None:
-    target = analysis_path(repo_path, source)
+def _stale(path: Path, version: object) -> StaleArtifactError:
+    return StaleArtifactError(
+        f"{path.name} is schema {version}, this build reads {SCHEMA_VERSION}. "
+        "Re-run the analysis; artifacts are regenerated, never migrated."
+    )
+
+
+def load(repo_path: Path | str) -> Analysis | None:
+    target = analysis_path(repo_path)
     if not target.is_file():
         return None
     try:
@@ -90,14 +95,15 @@ def summaries() -> list[RepoSummary]:
         return []
     rows: list[RepoSummary] = []
     for entry in sorted(root.glob("*.json")):
+        # A stale artifact is skipped rather than raised: one old file must not
+        # take the whole picker down, and the next analysis of it replaces it.
         try:
             analysis = read(entry)
-        except OSError, ValueError:
+        except OSError, ValueError, StaleArtifactError:
             continue
         rows.append(
             RepoSummary(
                 key=entry.stem,
-                source=analysis.source,
                 repo_path=analysis.repo_path,
                 repo_name=analysis.repo_name,
                 git_sha=analysis.git_sha,
@@ -141,29 +147,21 @@ def version_of(key: str) -> int | None:
 
 
 def key_for(repo_path: Path | str) -> str | None:
-    """Any cached key for this repository, whichever source it was built from.
+    """The cached key for this repository, or None when nothing is cached.
 
     Resolved without touching the repository, so a path that is gone from disk
-    still finds its artifacts: that is the repo most worth forgetting.
+    still finds its artifact: that is the repo most worth forgetting.
     """
-    for source in get_args(AnalysisSource):
-        if analysis_path(repo_path, source).is_file():
-            return repo_key(repo_path, source)
-    return None
+    return repo_key(repo_path) if analysis_path(repo_path).is_file() else None
 
 
 def forget(key: str) -> list[str]:
-    """Take a repository out of the cache: every source's artifact, and the pages drawn from each.
+    """Take a repository out of the cache. Returns the keys removed.
 
-    Scoped to the repository rather than to the key, because the picker names
-    repositories and shows one while ANY of its rows exist. Forgetting only the
-    `imports` artifact would leave `graphify-imports` behind, and the repo would
-    be back in the picker on the next read.
-
-    A stale artifact cannot say which repository it belongs to, so it goes
-    alone. Everything removed is a cache and regenerates on the next analysis;
-    nothing in the analysed repo itself is touched. Returns the keys removed,
-    and an empty list means there was nothing under that key.
+    A list because it is what the browser moves off of, and an empty one means
+    there was nothing under that key. A stale artifact goes too: the picker
+    cannot read it, which is exactly when it needs to go. Only the cache is
+    touched, never the analysed repo.
     """
     if "/" in key or "\\" in key or key.startswith("."):
         return []
@@ -172,26 +170,8 @@ def forget(key: str) -> list[str]:
     target = settings.cache_root / f"{key}.json"
     if not target.is_file():
         return []
-
-    try:
-        repo_path = read(target).repo_path
-    except StaleArtifactError, OSError, ValueError:
-        keys = [key]
-    else:
-        siblings = [repo_key(repo_path, source) for source in get_args(AnalysisSource)]
-        keys = list(dict.fromkeys([key, *siblings]))
-
-    removed: list[str] = []
-    for each in keys:
-        artifact = settings.cache_root / f"{each}.json"
-        pages = graphify_files.workdir(each)
-        if not artifact.is_file() and not pages.is_dir():
-            continue
-        artifact.unlink(missing_ok=True)
-        if pages.is_dir():
-            shutil.rmtree(pages)
-        removed.append(each)
-    return removed
+    target.unlink()
+    return [key]
 
 
 def write_json_to(analysis: Analysis, destination: Path) -> None:

@@ -50,7 +50,7 @@ COPY backend/pyproject.toml backend/uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-install-project
 
-# graphify, for the comparison tabs on the curated repos. Its own virtualenv,
+# graphify, for the symbol graph tab on the curated repos. Its own virtualenv,
 # because it pins tree-sitter below 0.26 and this app runs 0.26. Installed from
 # a hashed lock with no extras, so no LLM client is in the image
 # (ops/graphify/requirements.in says why).

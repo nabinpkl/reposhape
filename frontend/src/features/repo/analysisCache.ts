@@ -10,7 +10,7 @@ import type { QueryClient } from "@tanstack/react-query";
  * stored analysis had four files, and the canvas kept showing three.
  *
  * Every per-analysis query is keyed `[name, analysisKey, ...]` -- graph, paths,
- * file, sources, both graphify statuses -- which is the same shape the forget
+ * file, the symbol graph status -- which is the same shape the forget
  * path already predicates on.
  */
 export async function invalidateAnalysis(client: QueryClient, key: string): Promise<void> {

@@ -150,11 +150,10 @@ def partition(
 ) -> tuple[list[list[str]], list[str]]:
     """Louvain communities, largest first, with disambiguated labels.
 
-    Shared by the JSON view and the graphify file page so both draw the same
-    partition: same seed, same ordering, same labels. Files with no edge form
-    one trailing group rather than scattering, because a clustering that is
-    wrong would otherwise still draw as tidy separated balls -- and because a
-    file page needs every node placed somewhere.
+    Seeded, so the same view always gets the same partition, ordering and
+    labels. Files with no edge form one trailing group rather than scattering,
+    because a clustering that is wrong would otherwise still draw as tidy
+    separated balls, and every drawing needs every node placed somewhere.
     """
     graph: nx.Graph = nx.Graph()
     graph.add_nodes_from(keep)
