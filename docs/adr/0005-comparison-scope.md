@@ -1,5 +1,7 @@
 # ADR-0005: the comparison shares one file universe
 
+- Superseded by ADR-0013: the graphify projections are gone.
+
 ## Decision
 
 The graphify projections (`graphify-imports`, `graphify-all`) keep only files

@@ -6,14 +6,15 @@ runs on your machine, and opens the map in your browser.
 
 ![LangChain's monorepo as a map: folders as circles, files as dots sized by line count](docs/images/langchain-map-lines.jpg)
 
-*The **map · lines** view of LangChain, 1,766 source files with tests hidden. Each circle is a folder and
-each dot is a file, sized by its line count. Colours are clusters worked out
-from the imports.*
+*The **folders · size** view of LangChain, 1,766 source files with tests
+hidden. Each circle is a folder and each dot is a file, sized by its line
+count. Colours are clusters worked out from the imports.*
 
 ![The same map with the imports that cross between packages drawn on top](docs/images/langchain-map-edges.jpg)
 
-*The **map · edges** view: the same repo with the imports that cross from one package to another drawn
-on top. 1,296 of its 3,642 imports leave their package.*
+*The **folders · imports** view: the same repo with the imports that cross
+from one package to another drawn on top. 1,296 of its 3,642 imports leave
+their package.*
 
 ## Install
 
@@ -51,17 +52,26 @@ reposhape up https://github.com/langchain-ai/langchain
 
 ## Views
 
-The tabs at the top are different drawings of the same analysis.
+The tabs at the top are grouped by what they show.
 
-- **ours**: a force-directed graph. Files are nodes, imports are lines.
-- **map**: files packed into their folders, one dot per file.
-- **map · lines**: the same, with each dot sized by line count.
-- **map · edges**: the map with the imports between packages drawn on top.
+**Files** are reposhape's own analysis: every file and the imports between
+them.
 
-The sidebar filters by tests, file type and folder. The search box highlights
-matching files. The graphify tabs show the same repo as
-[graphify](https://pypi.org/project/graphifyy/) sees it, if you have it
-installed.
+- **import graph**: each file is a dot and each import a line, pulled together
+  by a force layout.
+- **folders**: files packed into the circles of their folders, one dot each.
+- **folders · size**: the same, with each dot's area set by the file's line
+  count.
+- **folders · imports**: the folders, with the imports that leave their
+  package drawn on top.
+
+**Symbols** are functions, classes and methods, and the calls between them.
+reposhape doesn't extract these itself. The **symbol graph** tab shows the page
+[graphify](https://pypi.org/project/graphifyy/) draws for the repo, once you
+have run `reposhape graphify-page` with graphify installed.
+
+The sidebar filters by tests, file type and folder, and the search box
+highlights matching files. The split button puts any two views side by side.
 
 ## Commands
 
@@ -75,6 +85,7 @@ installed.
 | `reposhape down` | Stop the server |
 | `reposhape repos` | List the repos you have analysed |
 | `reposhape forget <path>` | Remove a repo's analysis (its files are left alone) |
+| `reposhape graphify-page .` | Build the symbol graph with graphify (needs graphify installed) |
 
 `reposhape <command> --help` has the details.
 

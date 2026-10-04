@@ -1,5 +1,8 @@
 # ADR-0004: graphify's own page is framed, not cloned
 
+- Amended by ADR-0013: the framed page is now the `symbol graph` tab, the one view of
+  symbols, rather than half of a comparison.
+
 ## Decision
 
 The rendering comparison is a fourth view that frames graphify's `graph.html`

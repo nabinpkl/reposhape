@@ -7,6 +7,12 @@ vis-network 9.1.6; we draw with sigma. "The monorepo" below is the private
 repo this tool was first built against (SPEC.md). The values below are what to carry over,
 the section after is what not to.
 
+The dated sections below use the tab names of their day. Since 2026-10-04
+(ADR-0013): `ours` is `import graph`, `map` is `folders`, `map · lines` is
+`folders · size`, `map · edges` is `folders · imports`, and `graphify page` is
+`symbol graph`. `graphify files`, graphify's renderer over our file graph, was
+removed.
+
 ## Colour schemes
 
 The table below is the dark scheme, which is also the system default when the

@@ -70,15 +70,16 @@ one analysis path, `analysis.analyze`, called by both the CLI and
 `POST /api/analyze`, so the two cannot produce different JSON.
 
 ```
-reposhape up [repo|url] [--source] [--refresh] [--port]             start the server if needed, open the page
-reposhape status                                                    is the background server running, and where
-reposhape down                                                      stop the background server
-reposhape clone <url> [--quiet]                                     clone, keep, and analyse
-reposhape analyze-repo <repo> [--source] [--out FILE|-] [--quiet]   write the artifact
-reposhape view <repo> [--include-tests] [--top N]                   clustered summary, no browser
-reposhape repos                                                     what has been analysed
-reposhape forget <repo>                                             take it out of the cache, every source
-reposhape serve [--host] [--port] [--reload]                        the server in the foreground, no analysis
+reposhape up [repo|url] [--refresh] [--port]              start the server if needed, open the page
+reposhape status                                          is the background server running, and where
+reposhape down                                            stop the background server
+reposhape clone <url> [--quiet]                           clone, keep, and analyse
+reposhape analyze-repo <repo> [--out FILE|-] [--quiet]    write the artifact
+reposhape view <repo> [--include-tests] [--top N]         clustered summary, no browser
+reposhape repos                                           what has been analysed
+reposhape forget <repo>                                   take its analysis out of the cache
+reposhape graphify-page [repo|url] [--refresh]            build the symbol graph, with graphify
+reposhape serve [--host] [--port] [--reload]              the server in the foreground, no analysis
 ```
 
 `--out -` writes JSON to stdout and progress to stderr, so it pipes into jq.
@@ -135,59 +136,35 @@ directory.** `reposhape` is run inside other people's repositories by design, an
 first run inside the monorepo loaded that repo's `.env`, failed validation on
 seventeen unrelated keys, and printed an API key into the traceback.
 
-## Comparing against graphify, in the same window
+## What the tabs show
 
-`PRD.md` claims this tool is built instead of reusing graphify. A screenshot of
-graphify's own page cannot test that claim, because its layout, palette, edge
-styling and filters all differ from ours: a difference in the picture would say
-nothing about the extractor. So graphify's artifact is read directly and put
-through **this** clustering and **this** renderer, and the browser carries a tab
-strip to switch between them.
+One row of tabs, grouped by what the data is (ADR-0013). The group names the
+data once; each tab says only how it is drawn.
 
-That same strip carries the map: the identical `GraphView`, drawn as files
-packed into the circles of their folders with the edges dropped, on one 2D
-canvas rather than through sigma. `docs/graph-rendering.md` records why it is
-not sigma and what a dot's area is allowed to mean.
+- **Files**: this tool's own extraction, files and the imports between them.
+  - `import graph`: sigma, ForceAtlas2, a dot per file and a line per import.
+  - `folders`: the same `GraphView`, each file packed into the circles of its
+    folders, on one 2D canvas rather than through sigma.
+    `docs/graph-rendering.md` records why it is not sigma and what a dot's
+    area is allowed to mean.
+  - `folders · size`: the same, a dot's area being the file's line count.
+  - `folders · imports`: the folders with the imports that leave their package
+    drawn over them.
+- **Symbols**: `symbol graph`, graphify's own `graph.html` framed verbatim.
+  Symbol-level extraction is a non-goal here (`PRD.md`), so the symbols, the
+  layout and the drawing are all graphify's, and the tab says so. It is
+  disabled, with the command that builds it on hover, where graphify has
+  written no page for the repo.
 
-`graphify.py` reads `<repo>/graphify-out/graph.json` and nothing else. No
-graphify code is imported and no graphify command is run. Two things about its
-shape drive the mapping:
-
-- **Its nodes are symbols**, 29,402 of them for the monorepo, each carrying a
-  `source_file`. Projecting onto files is what makes the two comparable; the
-  38,662 symbol-to-symbol edges inside a single file collapse to nothing, which
-  is the right answer for a file-level graph. 3,996 symbols carry no
-  `source_file` at all and are counted in `files_skipped` rather than dropped.
-- **Its edges carry a `relation`**, sixteen of them. Only `imports`,
-  `imports_from`, `dynamic_import` and `re_exports` mean "this file pulls in
-  that file", so `graphify-imports` takes those and `graphify-all` takes
-  everything. Blending the two into one number would compare our import graph
-  against a graph that is mostly calls and say nothing.
-
-Measured on the monorepo, same repo, same commit, same clustering:
-
-| source | files | edges | clusters | largest cluster |
-| --- | --- | --- | --- | --- |
-| ours | 989 of 1,262 | 2,686 | 21 | 141 |
-| graphify imports | 1,132 of 1,606 | 2,948 | 27 | 485 |
-| graphify all edges | 1,171 of 1,645 | 4,923 | 33 | 485 |
-
-The row that matters is the last column. graphify's largest cluster is 485 files
-labelled after one app directory `+274 elsewhere`: a third of the repo in one
-partition spanning 274 directories, which is a cluster that cannot answer a
-question about where a change belongs. Its file list also contains `react`,
-`mermaid`, `shiki`, `node:fs` and `@xterm` as paths, because some of its symbols
-record a package name where a file goes, so external packages are nodes in its
-file graph. Ours covers fewer files (no Swift, Rust, shell or Markdown) and that
-is the honest cost on the other side.
-
-An analysis is keyed by repo **and** source, so the three sit in the cache side
-by side and the URL (`?repo=<key>`) links to one specific comparison.
+The tabs used to be two rows: which extractor's edges (ours, or graphify's
+symbol graph projected onto files), and which renderer. The projections existed
+to test the claim in `PRD.md`, and once measured (`docs/extractor-comparison.md`,
+ADR-0013) they had nothing left to say to a reader.
 
 ## Backend modules
 
 `backend/src/reposhape/`, flat. One file per concern, no directories: these
-are seventeen modules, and a directory per concept would be naming, not fan-out.
+are eighteen modules, and a directory per concept would be naming, not fan-out.
 
 - `scanning.py` finds the repo's source files. Prefers `git ls-files`: it
   applies .gitignore for free, never descends into node_modules, and the same
@@ -202,8 +179,9 @@ are seventeen modules, and a directory per concept would be naming, not fan-out.
   per repo, written to a staging file and moved so a reader never sees half of
   one. The digest keeps two checkouts of the same project apart; the name keeps
   the directory browsable.
-- `graphify.py` reads graphify's own artifact and projects it onto files, so
-  the two extractors can be compared through one renderer. See above.
+- `graphify_page.py` the symbol graph: drives the `graphify` binary's LLM-free
+  pipeline and serves the page it writes, byte for byte. No graphify code is
+  imported.
 - `launching.py` the probes behind `reposhape up`: whether a port is taken,
   whether what answers there is this app, and the URLs it prints. Every probe
   bypasses the machine's HTTP proxy, or a health check on 127.0.0.1 is answered
@@ -276,9 +254,8 @@ and fails on any byte difference. Generated files are never hand-edited.
 - `GET  /api/health` what this server is: `read_only`, and outside read-only mode
   the cache and clone roots. `reposhape up` identifies its own server by the cache root.
 - `GET  /api/repos` cached analyses, newest first. The repo picker's read path.
-- `DELETE /api/repos/{key}` forgets a repository: its artifact for every source and
-  the graphify pages drawn from each, because the picker shows a repo while any of
-  its rows remain. Only the cache is touched, never the analysed repo.
+- `DELETE /api/repos/{key}` forgets a repository's analysis. Only the cache is
+  touched, never the analysed repo.
 - `GET  /api/folders?path=` child directories, for picking a folder to analyse.
   The browser cannot hand the server a filesystem path -- `webkitdirectory` gives
   relative names, `showDirectoryPicker` gives a handle -- so the chooser runs here.
@@ -297,6 +274,10 @@ and fails on any byte difference. Generated files are never hand-edited.
   subtree, `app/wire/index.ts` takes one file. Memoised per artifact
   version (its mtime) and filter set, so a repeated view costs no Louvain run
   and a re-analysis misses the memo.
+- `GET  /api/graphify-status/{key}` whether the symbol graph exists for this
+  repo, and the command that builds it when it does not.
+- `GET  /api/graphify-page/{key}` the symbol graph: graphify's `graph.html`,
+  served verbatim and framed same-origin.
 - `GET  /api/file/{key}?path=` contents read from disk at request time.
 - `GET  /api/license/{key}?path=` the license governing a file: the nearest
   `LICENSE`, `LICENCE` or `COPYING` (any of `.md .txt .rst`) walking up from the
@@ -376,8 +357,7 @@ the repo, and rules that matched nothing.
 
 - `app/page.tsx` one route, exported as a static shell the client fills in.
   Nothing needs a Next server, which is what makes `output: "export"` possible.
-- `features/repo/` repo picker, the folder chooser that adds one, source and
-  renderer tabs. `serverMode.ts` reads `read_only` from `/api/health` and the
+- `features/repo/` repo picker, the folder chooser that adds one, the tab row. `serverMode.ts` reads `read_only` from `/api/health` and the
   picker, refresh and Add repo controls hide on a read-only server. Unknown
   counts as read-only, so a public page never flashes controls it then removes.
 - `features/graph/` sigma canvas, ForceAtlas2 worker, focus and isolate.
@@ -417,9 +397,9 @@ by the gate. `just up` is the daily command. `just web-export` rebuilds the
 bundle `reposhape up` serves; `just web` is the hot-reloading dev server for frontend
 work against `just serve`. `just analyze <repo>` plus `just view <repo>` do the
 whole job without a browser. `just release` deploys (ADR-0008).
-`just release-graphify` builds the graphify tabs for the curated repos on the
-server: `reposhape graphify-extract <url>` per repo, which runs `graphify update` and
-caches both projections. Measured 2026-09-30 on a laptop: hermes-agent 380 s
+`just release-graphify` builds the symbol graph for the curated repos on the
+server: `reposhape graphify-page <url> --refresh` per repo, which runs
+`graphify update` and keeps the page it writes. Measured 2026-09-30 on a laptop: hermes-agent 380 s
 and 3.6 GB peak for 240k symbols, and graphify writes no page for it (its
 community view is past graphify's 5,000-node limit); opencode 64 s and 1.9 GB;
 langchain 42 s and 0.9 GB, both with a page.

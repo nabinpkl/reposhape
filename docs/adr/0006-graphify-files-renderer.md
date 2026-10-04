@@ -1,5 +1,7 @@
 # ADR-0006: file-level data through graphify's renderer
 
+- Superseded by ADR-0013: the `graphify files` renderer is gone.
+
 ## Decision
 
 A third renderer, `graphify files`, draws the pane's current analysis with
