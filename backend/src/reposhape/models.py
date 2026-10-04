@@ -16,9 +16,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# Bumped when the artifact's shape changes. There is no migration path by
-# design: artifacts are cheap to regenerate and a migration is a second
-# reader of a format nobody has yet had to live with.
+# Bumped when the artifact's shape changes, and recorded in each artifact as
+# the shape it was written in. It does not decide what is read: an older
+# artifact that still validates is used as it is, because a field removed or
+# ignored is no reason to re-analyse. A change whose code needs data older
+# artifacts lack must make them fail validation, a new required field, and
+# then they are re-analysed rather than migrated (cache.read).
 SCHEMA_VERSION = 5
 
 Language = Literal["typescript", "javascript", "vue", "python"]
@@ -160,7 +163,11 @@ class Analysis(BaseModel):
     )
     stats: AnalysisStats
     links: list[RuntimeLink] = Field(default_factory=list)
-    link_stats: LinkStats
+    link_stats: LinkStats | None = Field(
+        default=None,
+        description="Null in an analysis written before runtime links existed (schema 3), "
+        "which is still read, with no links.",
+    )
 
 
 class Cluster(BaseModel):

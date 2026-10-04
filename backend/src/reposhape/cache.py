@@ -53,30 +53,23 @@ def read(path: Path) -> Analysis:
     had it. Returning None for both makes a schema bump look like an empty
     cache, which is the absence that sends you looking in the wrong place.
 
-    The version is checked even when the file parses. An older artifact can
-    still fit the current models, because unknown fields are ignored, and then
-    a bump would retire nothing.
+    An older artifact that still fits the models is read as it is, whatever its
+    `schema_version`: an upgrade must not cost a re-analysis it does not need.
+    Only one that no longer validates is stale (models.SCHEMA_VERSION).
     """
     raw = path.read_text(encoding="utf-8")
     try:
-        analysis = Analysis.model_validate_json(raw)
+        return Analysis.model_validate_json(raw)
     except ValueError as error:
         version = None
         with suppress(ValueError, KeyError, TypeError, AttributeError):
             version = json.loads(raw).get("schema_version")
         if version != SCHEMA_VERSION:
-            raise _stale(path, version) from error
+            raise StaleArtifactError(
+                f"{path.name} is schema {version}, this build reads {SCHEMA_VERSION}. "
+                "Re-run the analysis; artifacts are regenerated, never migrated."
+            ) from error
         raise
-    if analysis.schema_version != SCHEMA_VERSION:
-        raise _stale(path, analysis.schema_version)
-    return analysis
-
-
-def _stale(path: Path, version: object) -> StaleArtifactError:
-    return StaleArtifactError(
-        f"{path.name} is schema {version}, this build reads {SCHEMA_VERSION}. "
-        "Re-run the analysis; artifacts are regenerated, never migrated."
-    )
 
 
 def load(repo_path: Path | str) -> Analysis | None:
@@ -100,6 +93,8 @@ def summaries() -> list[RepoSummary]:
         try:
             analysis = read(entry)
         except OSError, ValueError, StaleArtifactError:
+            continue
+        if not _named_for(entry.stem, analysis):
             continue
         rows.append(
             RepoSummary(
@@ -126,9 +121,21 @@ def find(key: str) -> Analysis | None:
     if not target.is_file():
         return None
     try:
-        return read(target)
+        analysis = read(target)
     except OSError:
         return None
+    return analysis if _named_for(key, analysis) else None
+
+
+def _named_for(key: str, analysis: Analysis) -> bool:
+    """True when `key` is the one name this artifact's repo is cached under.
+
+    One repo, one key. Anything else in the cache directory is not this build's
+    artifact: chiefly the `-graphify-imports` and `-graphify-all` projections an
+    older version kept beside each repo, which still validate and would
+    otherwise list the repo two more times.
+    """
+    return key == repo_key(analysis.repo_path)
 
 
 def version_of(key: str) -> int | None:

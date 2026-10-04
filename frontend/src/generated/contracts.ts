@@ -21,7 +21,7 @@ export interface Analysis {
   assets: Record<string, number>;
   stats: AnalysisStats;
   links: RuntimeLink[];
-  link_stats: LinkStats;
+  link_stats: LinkStats | null;
 }
 
 export interface AnalysisStats {

@@ -57,14 +57,17 @@ longer carries a source: one repo, one artifact, one key. Schema 5.
 
 ## Consequences
 
-- Every cached analysis is schema 4 and is re-analysed on the next
-  `reposhape up`, which does that unasked. The cache now checks the version even
-  when an old file still parses, because unknown fields are ignored and a bump
-  would otherwise retire nothing; and the picker skips a stale artifact instead
-  of failing on it.
-- `-graphify-imports` and `-graphify-all` artifacts and `-graphify-files`
-  directories left in an existing cache are inert: stale, unread, never listed.
-  Deleting `~/.cache/reposhape` clears them; nothing in it is irreplaceable.
+- An existing cache keeps working without a re-analysis: a schema 4 artifact
+  still validates (its `source` is ignored), and so does a schema 3 one, which
+  shows with no runtime links as it did before. 0.1.2 treated every older
+  version as stale and emptied the picker on upgrade; 0.1.3 reads anything
+  that validates. The picker skips an artifact that does not, instead of
+  failing on it.
+- `-graphify-imports` and `-graphify-all` artifacts left in an existing cache
+  still validate, so the cache uses an artifact only under the key its own repo
+  path derives: one repo, one key. They are never listed or opened; they and
+  the `-graphify-files` directories are inert, and deleting them, or all of
+  `~/.cache/reposhape`, loses nothing.
 - `reposhape graphify-page` takes a cloned repo's URL as well as a path, and
   `--refresh` re-extracts rather than re-drawing a page from an old extraction.
   `just release-graphify` uses it, and reports and skips a repo whose graph is

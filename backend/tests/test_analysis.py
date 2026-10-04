@@ -86,29 +86,51 @@ def test_a_stale_artifact_says_so_rather_than_reading_as_absent(sample_repo, tmp
     raise AssertionError("a stale artifact must raise, not return None")
 
 
-def test_an_older_artifact_is_stale_even_when_it_still_parses(sample_repo):
-    """Unknown fields are ignored, so an old file can fit the current models.
+def test_an_older_artifact_that_still_validates_is_used_as_it_is(sample_repo):
+    """An upgrade must not cost a re-analysis it does not need.
 
-    Without the version check a schema bump would retire nothing: the old
-    artifact would keep being served as if this build had written it.
+    Schema 4 carried a `source` field that 5 dropped, and schema 3 predates
+    runtime links. Neither is missing anything this build needs to draw the
+    graph, so both are read, and the picker still lists the repo.
     """
     import json
 
-    from reposhape.cache import StaleArtifactError, analysis_path
+    from reposhape.cache import analysis_path
+
+    fresh = analyze(sample_repo)
+    cache.write(fresh)
+    target = analysis_path(sample_repo)
+    for older in (
+        {"schema_version": 4, "source": "imports"},
+        {"schema_version": 3, "source": "imports", "link_stats": None, "links": []},
+    ):
+        payload = json.loads(target.read_text())
+        payload.update(older)
+        target.write_text(json.dumps(payload))
+
+        loaded = cache.load(sample_repo)
+        assert loaded is not None
+        assert loaded.schema_version == older["schema_version"]
+        assert len(loaded.edges) == len(fresh.edges)
+        assert [row.key for row in cache.summaries()] == [cache.repo_key(sample_repo)]
+
+
+def test_an_artifact_under_any_other_name_is_not_this_repos(sample_repo):
+    """One repo, one key: older versions kept graphify projections beside it.
+
+    They still validate, so without the name check the repo would be listed
+    three times and each copy would open.
+    """
+    from reposhape.cache import analysis_path
 
     cache.write(analyze(sample_repo))
-    target = analysis_path(sample_repo)
-    payload = json.loads(target.read_text())
-    payload["schema_version"] = 4
-    payload["source"] = "imports"
-    target.write_text(json.dumps(payload))
+    key = cache.repo_key(sample_repo)
+    projection = analysis_path(sample_repo).with_name(f"{key}-graphify-imports.json")
+    projection.write_text(analysis_path(sample_repo).read_text())
 
-    try:
-        cache.load(sample_repo)
-    except StaleArtifactError as error:
-        assert "schema 4" in str(error)
-        return
-    raise AssertionError("an older schema_version must raise, whatever the shape")
+    assert [row.key for row in cache.summaries()] == [key]
+    assert cache.find(f"{key}-graphify-imports") is None
+    assert cache.find(key) is not None
 
 
 def test_vue_components_are_nodes_and_edges_in_both_directions(tmp_path: Path):
