@@ -1,6 +1,6 @@
 [project]
 name = "reposhape"
-version = "0.1.2"
+version = "0.1.3"
 description = "See the shape of a repository at a glance: a local, interactive map of a codebase's file-level imports."
 readme = "README.md"
 license = "MIT"
