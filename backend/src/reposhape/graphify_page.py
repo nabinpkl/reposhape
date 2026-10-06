@@ -16,6 +16,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from reposhape.scanning import inside_repo
+
 PAGE = Path("graphify-out") / "graph.html"
 ARTIFACT = Path("graphify-out") / "graph.json"
 
@@ -37,7 +39,9 @@ def page_path(repo: Path) -> Path:
 
 
 def has_page(repo: Path) -> bool:
-    return page_path(repo).is_file()
+    """A page is there, and it is the repo's own file rather than a symlink out of it."""
+    page = page_path(repo)
+    return page.is_file() and inside_repo(repo, page)
 
 
 def status_of(repo: Path) -> tuple[bool, str | None]:
@@ -59,7 +63,7 @@ def ensure(repo: Path, *, refresh: bool = False) -> Path:
     old extraction never saw, and a page re-drawn from it would still be stale.
     """
     target = page_path(repo)
-    if target.is_file() and not refresh:
+    if has_page(repo) and not refresh:
         return target
 
     exe = binary()
@@ -79,7 +83,7 @@ def ensure(repo: Path, *, refresh: bool = False) -> Path:
             repo,
         )
 
-    if not target.is_file():
+    if not has_page(repo):
         raise GraphifyPageError(
             f"graphify ran but wrote no {PAGE}. "
             "It may have skipped the page for a graph past its node limit; "

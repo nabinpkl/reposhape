@@ -50,6 +50,13 @@ gitignored, never here.
   or `same-site`, and `tests/test_api.py` sends both and expects refusals. A
   new way of reaching the server (a tailnet name, a LAN address) is a new
   `allowed_hosts` entry, never a removed check.
+- **A repo is someone else's content (ADR-0014).** A cloned repo can commit a
+  symlink to `~/.ssh/id_rsa` or a `graphify-out/graph.html` full of script.
+  Every read of repo content passes `scanning.inside_repo` first, at scan time
+  and again at request time; the framed page is sandboxed by header; and the
+  page's CSP allows only scripts this origin shipped. A new read of a repo
+  file goes through the same check, and `tests/test_api.py` plants a symlink
+  for each route that reads one.
 - **Commit at arc boundaries** with `just check` green, and say why in the
   message rather than what.
 

@@ -2,6 +2,8 @@
 
 - Amended by ADR-0013: the framed page is now the `symbol graph` tab, the one view of
   symbols, rather than half of a comparison.
+- Amended by ADR-0014: the page is served under `Content-Security-Policy: sandbox
+  allow-scripts`, so it never runs as this origin, framed or not.
 
 ## Decision
 

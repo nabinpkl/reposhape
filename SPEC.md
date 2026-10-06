@@ -277,8 +277,10 @@ and fails on any byte difference. Generated files are never hand-edited.
 - `GET  /api/graphify-status/{key}` whether the symbol graph exists for this
   repo, and the command that builds it when it does not.
 - `GET  /api/graphify-page/{key}` the symbol graph: graphify's `graph.html`,
-  served verbatim and framed same-origin.
-- `GET  /api/file/{key}?path=` contents read from disk at request time.
+  served verbatim and framed same-origin, under `Content-Security-Policy:
+  sandbox allow-scripts` so its scripts never run as this origin (ADR-0014).
+- `GET  /api/file/{key}?path=` contents read from disk at request time, only
+  while the path still resolves inside the repo (ADR-0014).
 - `GET  /api/license/{key}?path=` the license governing a file: the nearest
   `LICENSE`, `LICENCE` or `COPYING` (any of `.md .txt .rst`) walking up from the
   file's directory to the repo root, read at request time. Its SPDX id when the

@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from reposhape.models import ResolutionOutcome
+from reposhape.scanning import inside_repo
 
 # Probed in order. `.d.ts` is deliberately absent: a declaration file is a type
 # surface, not a module another file's runtime reaches.
@@ -135,9 +136,14 @@ class TsConfig:
     paths: dict[str, list[str]] = field(default_factory=dict)
 
 
-def _read_tsconfig(config_path: Path, seen: frozenset[Path] = frozenset()) -> dict:
-    """Parse one tsconfig, following `extends` and letting the child win."""
-    if config_path in seen or not config_path.is_file():
+def _read_tsconfig(root: Path, config_path: Path, seen: frozenset[Path] = frozenset()) -> dict:
+    """Parse one tsconfig, following `extends` and letting the child win.
+
+    An `extends` (or a symlinked tsconfig) that leaves the repo is not read:
+    the repo is someone else's content, and its config does not get to name
+    files on this machine (scanning.inside_repo).
+    """
+    if config_path in seen or not config_path.is_file() or not inside_repo(root, config_path):
         return {}
     try:
         raw = json.loads(strip_jsonc(config_path.read_text(encoding="utf-8", errors="replace")))
@@ -153,7 +159,7 @@ def _read_tsconfig(config_path: Path, seen: frozenset[Path] = frozenset()) -> di
             candidate = candidate / "tsconfig.json"
         elif candidate.suffix != ".json":
             candidate = candidate.with_suffix(".json")
-        inherited = _read_tsconfig(candidate, seen | {config_path})
+        inherited = _read_tsconfig(root, candidate, seen | {config_path})
         merged_options = {
             **inherited.get("compilerOptions", {}),
             **raw.get("compilerOptions", {}),
@@ -171,7 +177,9 @@ class WorkspacePackage:
     entries: tuple[str, ...]  # `main`, then `module`, when there are no `exports`
 
 
-def _read_json_object(path: Path) -> dict | None:
+def _read_json_object(root: Path, path: Path) -> dict | None:
+    if not inside_repo(root, path):
+        return None
     try:
         raw = json.loads(strip_jsonc(path.read_text(encoding="utf-8", errors="replace")))
     except json.JSONDecodeError, OSError:
@@ -179,13 +187,15 @@ def _read_json_object(path: Path) -> dict | None:
     return raw if isinstance(raw, dict) else None
 
 
-def _pnpm_packages(path: Path) -> list[str]:
+def _pnpm_packages(root: Path, path: Path) -> list[str]:
     """The `packages:` list of a pnpm-workspace.yaml, without a YAML parser.
 
     The block is a flat list of glob strings under one top-level key, which is
     all a workspace file carries that resolution needs. Everything else in it
     (catalogs, overrides) is dependency policy and is not read.
     """
+    if not inside_repo(root, path):
+        return []
     try:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
@@ -213,13 +223,13 @@ def workspace_globs(root: Path) -> list[str]:
     package manager it uses.
     """
     globs: list[str] = []
-    manifest = _read_json_object(root / "package.json")
+    manifest = _read_json_object(root, root / "package.json")
     declared = manifest.get("workspaces") if manifest is not None else None
     if isinstance(declared, dict):
         declared = declared.get("packages")
     if isinstance(declared, list):
         globs.extend(entry for entry in declared if isinstance(entry, str))
-    globs.extend(_pnpm_packages(root / "pnpm-workspace.yaml"))
+    globs.extend(_pnpm_packages(root, root / "pnpm-workspace.yaml"))
     return [entry.removeprefix("./").rstrip("/") for entry in globs]
 
 
@@ -308,7 +318,7 @@ class TypescriptResolver:
                     manifests.add(directory)
                 config_path = directory / "tsconfig.json"
                 if directory not in self._configs and config_path.is_file():
-                    options = _read_tsconfig(config_path).get("compilerOptions", {})
+                    options = _read_tsconfig(self._root, config_path).get("compilerOptions", {})
                     paths = options.get("paths") if isinstance(options, dict) else None
                     self._configs[directory] = TsConfig(
                         directory=directory,
@@ -321,7 +331,7 @@ class TypescriptResolver:
             relative = self._repo_relative(directory)
             if relative is None or relative == "." or not _in_workspace(relative, globs):
                 continue
-            manifest = _read_json_object(directory / "package.json")
+            manifest = _read_json_object(self._root, directory / "package.json")
             if manifest is None:
                 continue
             name = manifest.get("name")
@@ -589,8 +599,11 @@ class PythonResolver:
         the shape it is documented to have, because these files come from other
         people's repos and a string where a list belongs is their business.
         """
+        manifest = self._root / directory / "pyproject.toml"
+        if not inside_repo(self._root, manifest):
+            return set()
         try:
-            config = tomllib.loads((self._root / directory / "pyproject.toml").read_text("utf-8"))
+            config = tomllib.loads(manifest.read_text("utf-8"))
         except OSError, UnicodeDecodeError, tomllib.TOMLDecodeError:
             return set()
 

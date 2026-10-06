@@ -46,7 +46,7 @@ from reposhape.models import (
     RepoSummary,
     RuntimeLink,
 )
-from reposhape.scanning import language_of
+from reposhape.scanning import inside_repo, language_of
 
 # Two routers, and which one a route goes on is the whole public/personal
 # split. `reads` answers from the cache and from files already in an analysed
@@ -338,8 +338,9 @@ def graphify_page_html(key: str, request: Request) -> FileResponse:
     pretends otherwise.
     """
     analysis = _require(key)
-    page = graphify_page.page_path(Path(analysis.repo_path))
-    if not page.is_file():
+    repo = Path(analysis.repo_path)
+    page = graphify_page.page_path(repo)
+    if not graphify_page.has_page(repo):
         reason = _page_status(analysis, request).reason
         raise HTTPException(status_code=404, detail=reason or "no graphify page here")
     return FileResponse(page, media_type="text/html")
@@ -349,9 +350,10 @@ def graphify_page_html(key: str, request: Request) -> FileResponse:
 def get_file(key: str, path: str) -> FileContents:
     """File contents, read from disk now rather than embedded at analysis time.
 
-    `path` must name a file the analysis already knows about. That membership
-    check is the path-traversal guard: nothing outside the analysed repo is
-    reachable, and `../` never appears in an analysed path.
+    `path` must name a file the analysis already knows about, so `../` never
+    reaches here. Membership alone is not the guard, though: the file is read
+    now, and a symlink a `git pull` added since the analysis would name a host
+    file under a known path. So it must also still resolve inside the repo.
     """
     analysis = _require(key)
     known: dict[str, FileNode] = {node.path: node for node in analysis.files}
@@ -359,7 +361,10 @@ def get_file(key: str, path: str) -> FileContents:
     if node is None:
         raise HTTPException(status_code=404, detail=f"{path!r} is not in this analysis")
 
-    absolute = Path(analysis.repo_path) / path
+    root = Path(analysis.repo_path)
+    absolute = root / path
+    if not inside_repo(root, absolute):
+        raise HTTPException(status_code=404, detail=f"{path!r} now points outside the repo")
     try:
         raw = absolute.read_bytes()
     except OSError as error:
@@ -418,6 +423,40 @@ def get_license(key: str, path: str | None = None) -> RepoLicense:
 # the blanket DENY. SAMEORIGIN still refuses any other site.
 _FRAMED = "/api/graphify-page/"
 
+# The framed page is HTML that came out of the analysed repo's checkout, which
+# a cloned repo can commit as anything. The iframe sandboxes it, but opened in
+# a tab of its own ("open frame in new tab") it would run as this origin, with
+# the operator routes in reach. The header sandboxes it however it is opened:
+# its scripts run, in an origin of their own that the API refuses.
+_FRAMED_POLICY = "sandbox allow-scripts"
+
+
+def _page_policy(script_hashes: list[str]) -> str:
+    """The CSP for everything else: this origin's own code, and nothing injected.
+
+    Inline scripts are allowed by hash only, the export's own (web_bundle).
+    Styles allow inline because shiki colours tokens with style attributes and
+    Radix's scroll lock writes a <style>; a style cannot run code. The force
+    layout runs in a worker built from a blob URL. No 'wasm-unsafe-eval': the
+    highlighter uses shiki's JavaScript regex engine for exactly that reason.
+    """
+    return "; ".join(
+        [
+            "default-src 'self'",
+            " ".join(["script-src 'self'", *script_hashes]),
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data: blob:",
+            "font-src 'self' data:",
+            "connect-src 'self'",
+            "worker-src 'self' blob:",
+            "frame-src 'self'",
+            "frame-ancestors 'none'",
+            "object-src 'none'",
+            "base-uri 'none'",
+            "form-action 'self'",
+        ]
+    )
+
 
 def create_app(*, read_only: bool) -> FastAPI:
     """The app, with or without the routes that act on the host.
@@ -431,6 +470,7 @@ def create_app(*, read_only: bool) -> FastAPI:
     # Taken once, at start: the build this process is running, which is what
     # `reposhape up` compares with its own to tell a stale server (daemon.py).
     app.state.build = daemon.build_id()
+    page_policy = _page_policy(web_bundle.inline_script_hashes())
 
     @app.middleware("http")
     async def same_site_only(request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -459,13 +499,15 @@ def create_app(*, read_only: bool) -> FastAPI:
     @app.middleware("http")
     async def security_headers(request: Request, call_next: RequestResponseEndpoint) -> Response:
         # Every response, page and API alike: no sniffing, no referrer leakage,
-        # no framing by another site. These lived in the Next proxy while Next
-        # served the page; one server now answers both, so they live here.
+        # no framing by another site, no script this origin did not ship.
+        # These lived in the Next proxy while Next served the page; one server
+        # now answers both, so they live here.
         response = await call_next(request)
         response.headers["x-content-type-options"] = "nosniff"
         response.headers["referrer-policy"] = "no-referrer"
         framed = request.url.path.startswith(_FRAMED)
         response.headers["x-frame-options"] = "SAMEORIGIN" if framed else "DENY"
+        response.headers["content-security-policy"] = _FRAMED_POLICY if framed else page_policy
         return response
 
     app.include_router(reads)

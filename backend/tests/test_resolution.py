@@ -59,6 +59,22 @@ def test_repo_alias_resolves_relative_to_its_own_tsconfig(two_project_repo: Path
     assert resolver.resolve("app/src/entry.ts", "@repo/shared/util") == "shared/util.ts"
 
 
+def test_a_tsconfig_extends_out_of_the_repo_is_not_read(tmp_path: Path):
+    """The repo is someone else's; its config does not get to name host files."""
+    root = tmp_path / "repo"
+    (root / "src").mkdir(parents=True)
+    (root / "src" / "thing.ts").write_text("")
+    (tmp_path / "host.json").write_text('{"compilerOptions": {"paths": {"x/*": ["./src/*"]}}}')
+    (root / "tsconfig.json").write_text('{"extends": "../host.json"}')
+    resolver = TypescriptResolver(root, frozenset({"main.ts", "src/thing.ts"}))
+    assert resolver.resolve("main.ts", "x/thing") == "external_package"
+
+    (root / "base.json").write_text('{"compilerOptions": {"paths": {"x/*": ["./src/*"]}}}')
+    (root / "tsconfig.json").write_text('{"extends": "./base.json"}')
+    resolver = TypescriptResolver(root, frozenset({"main.ts", "src/thing.ts"}))
+    assert resolver.resolve("main.ts", "x/thing") == "src/thing.ts"
+
+
 def test_relative_import_probes_extensions_and_index(tmp_path: Path):
     (tmp_path / "a").mkdir()
     (tmp_path / "a" / "index.ts").write_text("")

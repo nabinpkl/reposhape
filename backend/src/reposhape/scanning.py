@@ -18,6 +18,19 @@ from reposhape.models import Language
 
 IGNORE_FILENAME = ".reposhapeignore"
 
+
+def inside_repo(root: Path, path: Path) -> bool:
+    """True when `path`, with every symlink followed, is `root` or beneath it.
+
+    A repo is someone else's content, and git checks a committed symlink out
+    as a real one: `x.py` pointing at `~/.ssh/id_rsa` is listed by
+    `git ls-files` like any other file. Every read of repo content goes
+    through this first, at scan time and again when a route reads the file,
+    because a `git pull` can add the link after the analysis.
+    """
+    return path.resolve().is_relative_to(root.resolve())
+
+
 # Directories never worth descending into on the walk fallback. git ls-files
 # handles these through .gitignore, so this list only serves the non-git path.
 ALWAYS_SKIP_DIRS = frozenset(
@@ -122,7 +135,7 @@ def _git(root: Path, *args: str) -> str | None:
 
 def _load_ignore_spec(root: Path) -> pathspec.PathSpec | None:
     ignore_file = root / IGNORE_FILENAME
-    if not ignore_file.is_file():
+    if not ignore_file.is_file() or not inside_repo(root, ignore_file):
         return None
     lines = ignore_file.read_text(encoding="utf-8", errors="replace").splitlines()
     return pathspec.PathSpec.from_lines("gitwildmatch", lines)
@@ -175,6 +188,10 @@ def scan(root: Path) -> RepoScan:
         if ignore_spec is not None and ignore_spec.match_file(relative):
             continue
         absolute = root / relative
+        if not inside_repo(root, absolute):
+            # A symlink out of the repo. The walk never follows one; the git
+            # listing names it, so it is refused here.
+            continue
         try:
             size = absolute.stat().st_size
         except OSError:

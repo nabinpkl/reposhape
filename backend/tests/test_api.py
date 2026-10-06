@@ -1,10 +1,14 @@
 """The read side, over HTTP."""
 
+import base64
+import hashlib
+import subprocess
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from reposhape import web_bundle
 from reposhape.api import create_app
 
 
@@ -283,6 +287,102 @@ def test_every_response_carries_the_security_headers(client: TestClient):
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["referrer-policy"] == "no-referrer"
     assert response.headers["x-frame-options"] == "DENY"
+
+
+def test_the_page_runs_only_scripts_this_origin_shipped(client: TestClient):
+    policy = client.get("/api/health").headers["content-security-policy"]
+    directives = dict(part.split(" ", 1) for part in policy.split("; "))
+    assert directives["script-src"].startswith("'self'")
+    assert "'unsafe-inline'" not in directives["script-src"]
+    assert "unsafe-eval" not in policy  # 'wasm-unsafe-eval' included
+    assert directives["frame-ancestors"] == "'none'"
+    assert directives["object-src"] == "'none'"
+
+
+def test_inline_scripts_are_allowed_by_the_hash_of_the_bundle_itself(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Read from the pages being served, so the policy cannot describe other pages."""
+    (tmp_path / "nested").mkdir()
+    (tmp_path / "index.html").write_text(
+        '<script src="/_next/a.js" async=""></script><script>self.__next_f.push([1])</script>'
+    )
+    (tmp_path / "nested" / "index.html").write_text("<script>self.__next_f.push([2])</script>")
+    monkeypatch.setattr(web_bundle, "BUNDLE_DIR", tmp_path)
+
+    def token(body: str) -> str:
+        digest = hashlib.sha256(body.encode()).digest()
+        return f"'sha256-{base64.b64encode(digest).decode()}'"
+
+    assert web_bundle.inline_script_hashes() == sorted(
+        [token("self.__next_f.push([1])"), token("self.__next_f.push([2])")]
+    )
+    policy = TestClient(create_app(read_only=True)).get("/api/health").headers
+    assert token("self.__next_f.push([1])") in policy["content-security-policy"]
+
+
+def _host_secret(tmp_path: Path) -> Path:
+    """A file outside every repo, standing in for ~/.ssh/id_rsa."""
+    secret = tmp_path / "outside" / "id_rsa"
+    secret.parent.mkdir()
+    secret.write_text("HOST-SECRET\n")
+    return secret
+
+
+def test_a_symlink_out_of_the_repo_is_never_scanned(
+    client: TestClient, sample_repo: Path, tmp_path: Path
+):
+    """git lists a committed symlink like any file, and git checks it out as a link."""
+    (sample_repo / "service" / "leak.py").symlink_to(_host_secret(tmp_path))
+    subprocess.run(["git", "init", "-q", str(sample_repo)], check=True)
+    key = client.post("/api/analyze", json={"repo_path": str(sample_repo)}).json()["key"]
+    assert "service/leak.py" not in client.get(f"/api/paths/{key}").json()["paths"]
+    response = client.get(f"/api/file/{key}", params={"path": "service/leak.py"})
+    assert response.status_code == 404
+    assert "HOST-SECRET" not in response.text
+
+
+def test_a_symlink_a_pull_added_after_the_analysis_is_refused_when_read(
+    public: TestClient, sample_repo: Path, analysed: str, tmp_path: Path
+):
+    known = sample_repo / "service" / "util.py"
+    known.unlink()
+    known.symlink_to(_host_secret(tmp_path))
+    response = public.get(f"/api/file/{analysed}", params={"path": "service/util.py"})
+    assert response.status_code == 404
+    assert "HOST-SECRET" not in response.text
+
+
+def test_a_license_that_links_out_of_the_repo_is_not_served(
+    public: TestClient, sample_repo: Path, analysed: str, tmp_path: Path
+):
+    (sample_repo / "LICENSE").symlink_to(_host_secret(tmp_path))
+    found = public.get(f"/api/license/{analysed}", params={"path": "service/util.py"}).json()
+    assert found["path"] is None
+    assert "HOST-SECRET" not in found["text"]
+
+
+def test_a_symbol_graph_page_that_links_out_of_the_repo_is_not_served(
+    public: TestClient, sample_repo: Path, analysed: str, tmp_path: Path
+):
+    (sample_repo / "graphify-out").mkdir()
+    (sample_repo / "graphify-out" / "graph.html").symlink_to(_host_secret(tmp_path))
+    assert public.get(f"/api/graphify-status/{analysed}").json()["ready"] is False
+    response = public.get(f"/api/graphify-page/{analysed}")
+    assert response.status_code == 404
+    assert "HOST-SECRET" not in response.text
+
+
+def test_a_symbol_graph_page_is_sandboxed_however_it_is_opened(
+    public: TestClient, sample_repo: Path, analysed: str
+):
+    """A cloned repo can commit graphify-out/graph.html with any script in it."""
+    (sample_repo / "graphify-out").mkdir()
+    (sample_repo / "graphify-out" / "graph.html").write_text("<script>fetch('/api/repos')</script>")
+    response = public.get(f"/api/graphify-page/{analysed}")
+    assert response.status_code == 200
+    assert response.headers["content-security-policy"] == "sandbox allow-scripts"
+    assert response.headers["x-frame-options"] == "SAMEORIGIN"
 
 
 def test_a_reanalysis_is_not_answered_from_the_old_partition(

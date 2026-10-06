@@ -3,8 +3,8 @@ import type { HighlighterCore } from "shiki/core";
 /**
  * One highlighter for the app, created on first use.
  *
- * Shiki loads a WASM regex engine and a grammar per language, so creating one
- * per file view would re-pay that on every click. The languages are the ones
+ * Shiki compiles a grammar per language, so creating one per file view would
+ * re-pay that on every click. The languages are the ones
  * the analyser can produce plus the assets it reports; anything else renders as
  * plain text rather than failing.
  */
@@ -48,15 +48,18 @@ let pending: Promise<HighlighterCore> | null = null;
  */
 export function highlighter(): Promise<HighlighterCore> {
   if (!pending) {
-    pending = Promise.all([import("shiki/core"), import("shiki/engine/oniguruma")]).then(
-      ([{ createHighlighterCore }, { createOnigurumaEngine }]) =>
+    pending = Promise.all([import("shiki/core"), import("shiki/engine/javascript")]).then(
+      ([{ createHighlighterCore }, { createJavaScriptRegexEngine }]) =>
         createHighlighterCore({
           themes: [
             import("shiki/themes/github-dark-default.mjs"),
             import("shiki/themes/github-light-default.mjs"),
           ],
           langs: Object.values(GRAMMARS).map((load) => load()),
-          engine: createOnigurumaEngine(import("shiki/wasm")),
+          // Not the Oniguruma WASM engine: compiling WASM needs a CSP that
+          // allows 'wasm-unsafe-eval', and the page's CSP does not (api.py).
+          // Strict, so a grammar this engine cannot run fails loudly here.
+          engine: createJavaScriptRegexEngine(),
         }),
     );
   }

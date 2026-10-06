@@ -20,6 +20,7 @@ from pathlib import Path
 
 from reposhape.configuration import settings
 from reposhape.models import RepoLicense
+from reposhape.scanning import inside_repo
 
 # In the order they are preferred when a repo has more than one. `COPYING` is
 # the GNU convention; `LICENCE` is the British spelling some repos use.
@@ -76,7 +77,7 @@ def find(repo: Path, start: str | None = None) -> RepoLicense:
     if start is not None:
         directory = directory.parent
     for candidate in [directory, *directory.parents]:
-        path = _license_file(candidate)
+        path = _license_file(root, candidate)
         if path is not None:
             return _read(root, path)
         if candidate == root:
@@ -86,7 +87,7 @@ def find(repo: Path, start: str | None = None) -> RepoLicense:
 
 def _read(root: Path, path: Path) -> RepoLicense:
     text, truncated = _capped(path)
-    notice = _named_file(path.parent, _NOTICE_STEMS)
+    notice = _named_file(root, path.parent, _NOTICE_STEMS)
     notice_text, notice_truncated = _capped(notice) if notice is not None else ("", False)
     return RepoLicense(
         path=path.relative_to(root).as_posix(),
@@ -108,14 +109,22 @@ def _capped(path: Path) -> tuple[str, bool]:
     return text, len(raw) > settings.max_file_view_bytes
 
 
-def _license_file(directory: Path) -> Path | None:
-    return _named_file(directory, _STEMS)
+def _license_file(root: Path, directory: Path) -> Path | None:
+    return _named_file(root, directory, _STEMS)
 
 
-def _named_file(directory: Path, stems: tuple[str, ...]) -> Path | None:
-    """The first of `stems` (with any of `_SUFFIXES`) in `directory`, case-insensitively."""
+def _named_file(root: Path, directory: Path, stems: tuple[str, ...]) -> Path | None:
+    """The first of `stems` (with any of `_SUFFIXES`) in `directory`, case-insensitively.
+
+    A `LICENSE` that is a symlink out of the repo is not one: it would serve
+    whatever host file it names (scanning.inside_repo).
+    """
     try:
-        by_name = {child.name.lower(): child for child in directory.iterdir() if child.is_file()}
+        by_name = {
+            child.name.lower(): child
+            for child in directory.iterdir()
+            if child.is_file() and inside_repo(root, child)
+        }
     except OSError:
         return None
     for stem in stems:
