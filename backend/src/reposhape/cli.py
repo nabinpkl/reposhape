@@ -324,21 +324,49 @@ def analyze_repo(
 
 @app.command()
 def view(
-    repo: Annotated[Path, typer.Argument(help="Repository to summarise.")],
+    repo: Annotated[
+        Path | None, typer.Argument(help="Repository to summarise, from the cache.")
+    ] = None,
+    artifact: Annotated[
+        Path | None,
+        typer.Option(
+            "--from",
+            help="An artifact `analyze-repo --out` wrote, read instead of the cache.",
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Print the whole view as JSON, clusters included: what the page's first "
+            "load draws. --top does not apply.",
+        ),
+    ] = False,
     include_tests: Annotated[bool, typer.Option("--include-tests")] = False,
     top: Annotated[int, typer.Option("--top", help="How many clusters to list.")] = 20,
 ) -> None:
-    """Print the clustered view for a cached analysis, without a browser."""
+    """Print the clustered view for an analysis, without a browser."""
     try:
-        analysis = cache.load(repo)
-    except StaleArtifactError as error:
-        _stderr(f"{error}")
+        if artifact is not None and repo is None:
+            analysis = cache.read(artifact)
+        elif repo is not None and artifact is None:
+            analysis = cache.load(repo)
+        else:
+            _stderr("give a repo or --from <artifact.json>, not both")
+            raise typer.Exit(code=1)
+    except (OSError, ValueError, StaleArtifactError) as error:
+        _stderr(f"error: {error}")
         raise typer.Exit(code=1) from error
     if analysis is None:
         _stderr(f"no cached analysis for {repo}. Run: reposhape analyze-repo {repo}")
         raise typer.Exit(code=1)
 
+    # The page's defaults: nothing excluded, type-only imports kept.
     result = build_view(analysis, include_tests=include_tests)
+    if as_json:
+        json.dump(result.model_dump(mode="json"), sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        return
     stats = result.stats
     print(
         f"{stats.visible_files}/{stats.total_files} files, "

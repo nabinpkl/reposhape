@@ -1,6 +1,7 @@
 """The terminal half of the cache's write side."""
 
 import importlib.metadata
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ from typer.testing import CliRunner
 from reposhape import cache
 from reposhape.analysis import analyze
 from reposhape.cli import app
+from reposhape.graphing import build_view
 
 runner = CliRunner()
 
@@ -150,3 +152,47 @@ def test_windows_is_refused_by_name_before_any_command_runs(monkeypatch: pytest.
     result = runner.invoke(app, ["status"])
     assert result.exit_code == 1
     assert "Windows is not supported" in result.stderr
+
+
+def test_view_from_an_artifact_prints_the_default_view_as_json(sample_repo: Path, tmp_path: Path):
+    """The page's first load, clusters and all, from a file the cache never saw."""
+    artifact = tmp_path / "shape.json"
+    written = runner.invoke(app, ["analyze-repo", str(sample_repo), "--out", str(artifact)])
+    assert written.exit_code == 0, written.output
+
+    result = runner.invoke(app, ["view", "--from", str(artifact), "--json"])
+
+    assert result.exit_code == 0, result.output
+    expected = build_view(cache.read(artifact)).model_dump(mode="json")
+    assert json.loads(result.stdout) == expected
+    assert expected["clusters"]
+    assert cache.summaries() == []
+
+
+def test_view_from_an_artifact_prints_the_summary_without_json(sample_repo: Path, tmp_path: Path):
+    artifact = tmp_path / "shape.json"
+    cache.write_json_to(analyze(sample_repo), artifact)
+
+    result = runner.invoke(app, ["view", "--from", str(artifact)])
+
+    assert result.exit_code == 0, result.output
+    assert " clusters\n" in result.stdout.splitlines(keepends=True)[0]
+
+
+@pytest.mark.parametrize("args", [[], ["somewhere", "--from", "shape.json"]])
+def test_view_takes_a_repo_or_an_artifact_and_exactly_one(args: list[str]):
+    result = runner.invoke(app, ["view", *args])
+    assert result.exit_code == 1
+    assert "--from" in result.stderr
+
+
+def test_view_from_a_missing_or_unreadable_artifact_fails_loudly(tmp_path: Path):
+    missing = runner.invoke(app, ["view", "--from", str(tmp_path / "nope.json"), "--json"])
+    assert missing.exit_code == 1
+    assert "error:" in missing.stderr and missing.stdout == ""
+
+    garbage = tmp_path / "garbage.json"
+    garbage.write_text("{}", encoding="utf-8")
+    unreadable = runner.invoke(app, ["view", "--from", str(garbage), "--json"])
+    assert unreadable.exit_code == 1
+    assert "error:" in unreadable.stderr and unreadable.stdout == ""

@@ -76,6 +76,7 @@ reposhape down                                            stop the background se
 reposhape clone <url> [--quiet]                           clone, keep, and analyse
 reposhape analyze-repo <repo> [--out FILE|-] [--quiet]    write the artifact
 reposhape view <repo> [--include-tests] [--top N]         clustered summary, no browser
+reposhape view --from FILE --json                         the page's default view, as JSON
 reposhape repos                                           what has been analysed
 reposhape forget <repo>                                   take its analysis out of the cache
 reposhape graphify-page [repo|url] [--refresh]            build the symbol graph, with graphify
@@ -83,6 +84,9 @@ reposhape serve [--host] [--port] [--reload]              the server in the fore
 ```
 
 `--out -` writes JSON to stdout and progress to stderr, so it pipes into jq.
+`view --json` prints the `GraphView` the page loads first (tests out, type-only
+imports kept, nothing excluded), clusters included; `--from` reads an artifact
+`analyze-repo --out` wrote instead of the cache, and works with or without `--json`.
 
 ### `reposhape up` is the daily command
 
