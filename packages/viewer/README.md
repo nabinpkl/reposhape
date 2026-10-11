@@ -1,152 +1,145 @@
 # reposhape-viewer
 
-Any tree of files as nested circles, with a file pane. These are the React
-components behind [reposhape](https://github.com/nabinpkl/reposhape)'s folder
-views, packaged to draw any data that has folders and files in it: a
-repository, a picked directory, a bucket listing, an archive's table of contents.
+React components that draw any folder tree as nested circles, with a file pane.
 
-Every file is a dot and every folder is the circle around its files. Clicking a
-folder flies into it, clicking a file selects it and opens it in the pane, the
-wheel or a pinch zooms, dragging pans, and a double click fits the whole tree
-again. One canvas, drawn by hand: 1,766 files redraw in about a millisecond.
+![The links view: langchain's files as nested circles, imports bundled over them](https://raw.githubusercontent.com/nabinpkl/reposhape/main/packages/viewer/screenshots/folders-links.jpg)
 
-![FolderViewer drawing langchain's 1,766 source files: libs/langchain, core, partners and the rest as nested circles, each file a dot coloured by its import cluster](https://raw.githubusercontent.com/nabinpkl/reposhape/main/packages/viewer/screenshots/folders.jpg)
+<sub>Screenshots: [langchain](https://github.com/langchain-ai/langchain) (MIT), 1,766 files, coloured by import cluster.</sub>
 
-Every screenshot here is this package drawing
-[langchain-ai/langchain](https://github.com/langchain-ai/langchain) (MIT) at
-commit `c01de7f`: its 1,766 source files with tests left out, each coloured by
-the import cluster [reposhape](https://github.com/nabinpkl/reposhape) found,
-with line counts as sizes and the 3,642 imports between them as links.
+## Install
 
 ```sh
 npm install reposhape-viewer
 ```
 
-React 18 or 19 is a peer dependency.
+Needs React 18 or 19.
 
-## Use
+## Quick start
 
 ```tsx
-import { FolderViewer, type FileContent, type FolderData } from "reposhape-viewer";
+import { FolderViewer } from "reposhape-viewer";
 import "reposhape-viewer/style.css";
 
-const data: FolderData = {
+const data = {
   files: [
     { path: "src/index.ts", size: 1200 },
     { path: "src/lib/shape.ts", size: 5400 },
     { path: "README.md", size: 800 },
   ],
-  sizeLabel: "bytes",
 };
 
-async function loadFile(path: string): Promise<FileContent> {
-  const response = await fetch(`/files/${path}`);
-  return { kind: "text", text: await response.text() };
-}
+const loadFile = async (path: string) => ({
+  kind: "text" as const,
+  text: await (await fetch(`/files/${path}`)).text(),
+});
 
-export function Files() {
+export default function App() {
   return (
     <div style={{ height: 600 }}>
-      <FolderViewer data={data} loadFile={loadFile} theme="dark" />
+      <FolderViewer data={data} loadFile={loadFile} />
     </div>
   );
 }
 ```
 
-`FolderViewer` fills its box, so give it, or its parent, a height. Keep
-`loadFile` stable (define it outside the component, or wrap it in
-`useCallback`): the pane reloads when it changes.
+Click a folder to zoom in, click a file to open it, double-click to zoom back out.
 
-### The views
+## Views
 
-- **folders**: one dot per file, so a folder's circle says how many files it holds.
-- **folders · size**: a dot's area is its file's `size`. Offered when the data has sizes.
-- **folders · links**: `links` drawn over the folders, bundled up the folder
-  tree. Links that leave their package are emphasised; hovering a circle shows
-  its own links both ways with arrows. Offered when the data has links.
+**folders**: one dot per file.
 
-![folders · size: the same tree with each dot's area set by the file's line count, so the anthropic and openrouter partner packages stand out as single large files](https://raw.githubusercontent.com/nabinpkl/reposhape/main/packages/viewer/screenshots/folders-size.jpg)
+![folders view](https://raw.githubusercontent.com/nabinpkl/reposhape/main/packages/viewer/screenshots/folders.jpg)
 
-![folders · links: imports drawn over the folders and bundled into trunks, with the ones leaving their package, such as partners into core, in their cluster's colour](https://raw.githubusercontent.com/nabinpkl/reposhape/main/packages/viewer/screenshots/folders-links.jpg)
+**folders · size**: dot area is the file's `size`.
 
-## The data
+![folders · size view](https://raw.githubusercontent.com/nabinpkl/reposhape/main/packages/viewer/screenshots/folders-size.jpg)
 
-```ts
-interface FolderData {
-  files: { path: string; size?: number; group?: string | null }[];
-  groups?: { id: string; label?: string; color?: string }[];
-  links?: { source: string; target: string }[];
-  sizeLabel?: string; // what `size` measures, for labels: "bytes", "lines"
-  sizeFloor?: number; // smallest area a file gets in the size view
-}
-```
+**folders · links**: your `links` drawn over the folders (the image at the top).
 
-- **Paths** are slash-separated and relative to the root. Folders come from the
-  paths; there is no separate folder list.
-- **Colour** comes from groups. With no `groups`, files are grouped by their
-  `group` string, or by extension when that is missing too (`.ts`, `.png`,
-  `.gitignore`, `no extension`). Groups are ranked by size, and the ten largest
-  own a colour from a colour-blind-safe palette; the rest share one tone,
-  because an eleventh colour would no longer tell anything apart. With
-  `groups`, their order and colours are kept, and `group: null` leaves a file
-  neutral.
-- **Sizes** default the floor to half the median size, so a small file beside a
-  huge one is still a visible dot.
+## File pane
 
-`toShape(data)` returns the resolved groups and colours, for a legend of your own.
+![Map with a file selected and the file pane open](https://raw.githubusercontent.com/nabinpkl/reposhape/main/packages/viewer/screenshots/file-pane.jpg)
 
-## The parts
-
-`FolderViewer` is `FolderMap` and `FilePane` with a view switch. Use the parts
-for a layout of your own:
+Use the map and the pane separately for your own layout:
 
 ```tsx
 import { FilePane, FolderMap } from "reposhape-viewer";
 
-<FolderMap
-  data={data}
-  sizing="files" // or "size"
-  links={false}
-  theme="dark"
-  selected={path}
-  onSelect={setPath} // a file's path, or null for empty ground
-  highlight="src/" // files containing this text stay lit, the rest dim
-  dimmed={new Set<string>()}
-  onOpenFile={open}
-  onDismiss={close}
-  labels={{ root: "repo root", linkOut: (n) => `${n} imports`, linkIn: (n) => `${n} importers` }}
-/>
+const [path, setPath] = useState<string | null>(null);
 
-<FilePane path={path} load={loadFile} onClose={close} theme="dark" />
+<FolderMap data={data} selected={path} onSelect={setPath} />
+{path && <FilePane path={path} load={loadFile} onClose={() => setPath(null)} />}
 ```
 
-`FilePane` takes `children`, rendered between its meta line and the content,
-for rows of your own. `CodeBlock` is the pane's code view on its own.
-
-![FolderMap with langchain_core/messages/ai.py selected, and FilePane beside it showing the file highlighted: 854 lines, 28.5 KB](https://raw.githubusercontent.com/nabinpkl/reposhape/main/packages/viewer/screenshots/file-pane.jpg)
-
-### File content
+## Data
 
 ```ts
+type FolderData = {
+  files: { path: string; size?: number; group?: string | null }[];
+  groups?: { id: string; label?: string; color?: string }[];
+  links?: { source: string; target: string }[];
+  sizeLabel?: string; // "bytes", "lines"
+};
+
 type FileContent =
-  | { kind: "text"; text: string; size?: number; truncated?: boolean }
-  | { kind: "image"; src: string; size?: number; dispose?: () => void }
-  | { kind: "binary"; size?: number };
+  | { kind: "text"; text: string }
+  | { kind: "image"; src: string }
+  | { kind: "binary" };
 ```
 
-Text is highlighted with [shiki](https://shiki.style) when its extension is
-TypeScript, JavaScript, JSX/TSX, Vue, Python, JSON or CSS, and shown with line
-numbers otherwise. Shiki loads on the first text file, not before.
+- Folders come from the paths.
+- No `group`? Files are coloured by extension.
+- Text is syntax highlighted for TS, JS, Vue, Python, JSON and CSS.
 
-`readBrowserFile(file)` turns a browser `File` (from an `<input type="file">`,
-a drop, the File System Access API) into content: an image by its MIME type,
-binary when its first 8,000 bytes hold a NUL byte, text otherwise, cut at
-512 KB.
+## Local files
+
+Show a folder the user picks, without a server:
+
+```tsx
+import { readBrowserFile } from "reposhape-viewer";
+
+<input
+  type="file"
+  // @ts-expect-error: not in React's types
+  webkitdirectory=""
+  onChange={(e) => {
+    const files = new Map([...e.target.files!].map((f) => [f.webkitRelativePath, f]));
+    setData({ files: [...files].map(([path, f]) => ({ path, size: f.size })) });
+    setLoad(() => (path: string) => readBrowserFile(files.get(path)!));
+  }}
+/>
+```
+
+## Props
+
+| `FolderViewer` | |
+| --- | --- |
+| `data` | `FolderData` |
+| `loadFile` | `(path) => Promise<FileContent>` |
+| `theme` | `"dark"` (default) or `"light"` |
+| `initialView` | `"files"`, `"size"` or `"links"` |
+| `highlight` | dims files whose path doesn't contain this text |
+
+| `FolderMap` | |
+| --- | --- |
+| `data` | `FolderData` |
+| `sizing` | `"files"` or `"size"` |
+| `links` | draw `data.links` |
+| `theme` | `"dark"` or `"light"` |
+| `selected`, `onSelect` | the selected file path |
+| `highlight`, `dimmed` | dim files by text or by path set |
+| `onOpenFile`, `onDismiss` | file clicked, empty space clicked |
+
+| `FilePane` | |
+| --- | --- |
+| `path` | file to show |
+| `load` | `(path) => Promise<FileContent>` |
+| `onClose` | shows a close button |
+| `theme` | `"dark"` or `"light"` |
 
 ## Styling
 
-`style.css` styles the pane, the tabs and the code. Every colour is a CSS
-variable on `.rs-viewer`, so restyling means overriding variables:
+Override CSS variables:
 
 ```css
 .rs-viewer[data-theme] {
@@ -156,19 +149,13 @@ variable on `.rs-viewer`, so restyling means overriding variables:
 }
 ```
 
-The variables are `--rs-canvas`, `--rs-panel`, `--rs-line`,
-`--rs-line-strong`, `--rs-fg`, `--rs-muted`, `--rs-faint`, `--rs-accent`,
-`--rs-danger`, `--rs-warn`, `--rs-font`, `--rs-font-mono` and
-`--rs-aside-width`. The map's canvas takes its colours from the `theme` prop.
+Also `--rs-fg`, `--rs-muted`, `--rs-line`, `--rs-font`, `--rs-font-mono`, `--rs-aside-width`.
 
 ## Notes
 
-- **Next.js:** the build starts with `"use client"`, so a server component can
-  import it directly.
-- **Content Security Policy:** highlighting uses shiki's JavaScript regex
-  engine, not WebAssembly, so no `'wasm-unsafe-eval'` is needed.
-  `readBrowserFile` images are `blob:` URLs, which `img-src` has to allow.
-- **Size:** packing and drawing were measured up to about 20,000 files.
+- Works in Next.js server components (ships with `"use client"`).
+- No WebAssembly, so a strict CSP is fine.
+- Tested up to about 20,000 files.
 
 ## License
 
