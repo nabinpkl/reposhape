@@ -24,6 +24,28 @@ from pydantic import BaseModel, Field
 # then they are re-analysed rather than migrated (cache.read).
 SCHEMA_VERSION = 5
 
+# Colour-blind-safe categorical ramp, carried over from the tool being replaced
+# so a familiar graph keeps familiar colours. Here rather than in graphing
+# because it is part of what the wire means: a cluster's `color` is one of
+# these, and the browser colours any other grouping (a folder's extensions)
+# from the same list, exported with the types.
+PALETTE = (
+    "#4E79A7",
+    "#F28E2B",
+    "#E15759",
+    "#76B7B2",
+    "#59A14F",
+    "#EDC948",
+    "#B07AA1",
+    "#FF9DA7",
+    "#9C755F",
+    "#BAB0AC",
+)
+
+# Everything past the palette shares this. Position still separates those
+# groups on the canvas; colour no longer claims to.
+OTHER_COLOR = "#5c5c72"
+
 Language = Literal["typescript", "javascript", "vue", "python"]
 
 ImportKind = Literal["static", "export_from", "dynamic", "require", "from_import"]

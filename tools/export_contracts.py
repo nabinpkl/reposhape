@@ -12,6 +12,7 @@ catches a model change that nobody propagated.
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -61,9 +62,29 @@ def _render() -> str:
     ]
     aliases.sort()
 
+    # Constants the browser needs the same value of, derived the same way: an
+    # upper-case name holding a string or a tuple of strings.
+    constants = [
+        (name, value)
+        for name, value in vars(models).items()
+        if name.isupper()
+        and (
+            isinstance(value, str)
+            or (isinstance(value, tuple) and all(isinstance(item, str) for item in value))
+        )
+    ]
+    constants.sort()
+
     lines = [HEADER]
     for name, alias in aliases:
         lines.append(f"export type {name} = {_union(alias)};")
+    lines.append("")
+
+    for name, value in constants:
+        if isinstance(value, str):
+            lines.append(f"export const {name} = {json.dumps(value)};")
+        else:
+            lines.append(f"export const {name} = {json.dumps(list(value))} as const;")
     lines.append("")
 
     for model in exported:

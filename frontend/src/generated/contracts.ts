@@ -7,6 +7,9 @@ export type LinkKind = "event" | "process" | "loader";
 export type ResolutionOutcome = "external_package" | "asset" | "no_matching_file" | "outside_repo" | "unparsed_alias";
 export type UnresolvedReason = "no_matching_file" | "outside_repo" | "unparsed_alias";
 
+export const OTHER_COLOR = "#5c5c72";
+export const PALETTE = ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC948", "#B07AA1", "#FF9DA7", "#9C755F", "#BAB0AC"] as const;
+
 export interface Analysis {
   schema_version: number;
   repo_path: string;

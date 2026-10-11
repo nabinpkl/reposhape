@@ -20,6 +20,8 @@ import networkx as nx
 from networkx.algorithms.community import louvain_communities
 
 from reposhape.models import (
+    OTHER_COLOR,
+    PALETTE,
     Analysis,
     Cluster,
     GraphNode,
@@ -28,24 +30,6 @@ from reposhape.models import (
     ViewStats,
 )
 
-# Colour-blind-safe categorical ramp, carried over from the tool being replaced
-# so a familiar graph keeps familiar colours.
-PALETTE = (
-    "#4E79A7",
-    "#F28E2B",
-    "#E15759",
-    "#76B7B2",
-    "#59A14F",
-    "#EDC948",
-    "#B07AA1",
-    "#FF9DA7",
-    "#9C755F",
-    "#BAB0AC",
-)
-
-# Everything past the palette shares this. Position still separates those
-# clusters on the canvas; colour no longer claims to.
-OTHER_COLOR = "#5c5c72"
 UNCLUSTERED_COLOR = "#3a3a4e"
 
 
