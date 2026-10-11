@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { FileViewer } from "@/features/file-view/FileViewer";
 import { ClusterLegend } from "@/features/filters/ClusterLegend";
@@ -14,6 +14,7 @@ import { NodeInfo } from "@/features/graph/NodeInfo";
 import { SymbolGraph } from "@/features/graph/SymbolGraph";
 import type { EdgeSummary } from "@/features/map/mapEdges";
 import { MapCanvas } from "@/features/map/MapCanvas";
+import { fromGraphView } from "@/features/map/shape";
 import { isFramed } from "@/features/repo/RendererTabs";
 import { RepoBar, type Renderer } from "@/features/repo/RepoBar";
 import { useReadOnly } from "@/features/repo/serverMode";
@@ -202,6 +203,8 @@ export function Workspace() {
   }, [openFile, clearView, sidebarOpen]);
 
   const view = graph.data;
+  // One shape per view, so a repaint never re-packs the map.
+  const mapShape = useMemo(() => (view ? fromGraphView(view) : null), [view]);
   // The framed symbol graph hides the sidebar controls: it carries its own
   // sidebar and legend, so our filters, focus and file pane do not apply.
   const framed = isFramed(renderer) && analysisKey !== null;
@@ -311,10 +314,10 @@ export function Workspace() {
           {view && renderer === "import-graph" ? (
             <GraphCanvas view={view} onOpenFile={onOpenFilePrimary} />
           ) : null}
-          {view && renderer !== "import-graph" ? (
+          {mapShape && renderer !== "import-graph" ? (
             <MapCanvas
-              view={view}
-              sizing={renderer === "folders-size" ? "lines" : "files"}
+              shape={mapShape}
+              sizing={renderer === "folders-size" ? "size" : "files"}
               edges={renderer === "folders-imports"}
               onOpenFile={onOpenFilePrimary}
               onDismiss={onDismissFile}

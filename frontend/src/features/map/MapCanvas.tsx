@@ -16,7 +16,7 @@ import {
   type Strand,
 } from "@/features/map/mapEdges";
 import { COLLAPSE, MAP_SIZE, packView, type MapCircle, type Sizing } from "@/features/map/mapLayout";
-import type { GraphView } from "@/generated/contracts";
+import type { Shape } from "@/features/map/shape";
 
 /**
  * The map's renderer: one 2D canvas, drawn by hand.
@@ -251,14 +251,14 @@ function circleAt(root: MapCircle, camera: Camera, px: number, py: number): MapC
 }
 
 export function MapCanvas({
-  view,
+  shape,
   sizing,
   edges,
   onOpenFile,
   onDismiss,
   onSummary,
 }: {
-  view: GraphView;
+  shape: Shape;
   sizing: Sizing;
   /** Draw the imports that cross a package boundary. See `mapEdges`. */
   edges: boolean;
@@ -286,14 +286,14 @@ export function MapCanvas({
 
   // Packed once per view and sizing. A camera move never re-runs this, which is
   // what makes the drawing the same picture every time it is opened.
-  const layout = useMemo(() => packView(view, sizing, domScheme()), [view, sizing]);
+  const layout = useMemo(() => packView(shape, sizing, domScheme()), [shape, sizing]);
   /**
    * The crossing edges, resolved against the packing. Built only for the tab
    * that draws them, because it walks every edge in the view.
    */
   const edgeIndex = useMemo(
-    () => (edges ? buildEdgeIndex(layout, view) : null),
-    [edges, layout, view],
+    () => (edges ? buildEdgeIndex(layout, shape) : null),
+    [edges, layout, shape],
   );
   /**
    * Bundled geometry for one camera scale. An edge ends on the circle the

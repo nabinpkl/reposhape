@@ -1,5 +1,5 @@
 import { COLLAPSE, type MapCircle } from "@/features/map/mapLayout";
-import type { GraphView } from "@/generated/contracts";
+import type { Shape } from "@/features/map/shape";
 
 /**
  * The map's edges, and the filter that makes them worth drawing.
@@ -198,7 +198,7 @@ function packageOf(path: string, depth: number): string {
  * Everything that depends on the layout but not on the camera. Rebuilt when the
  * view or the sizing changes, which is also when the packing is rebuilt.
  */
-export function buildEdgeIndex(root: MapCircle, view: GraphView): EdgeIndex {
+export function buildEdgeIndex(root: MapCircle, shape: Shape): EdgeIndex {
   // Every chain, rather than the endpoints' chains on demand. The hover
   // exemption can ask about any circle in the repo, so there is no subset to
   // be lazy about, and each one is its parent's with the node on the front.
@@ -220,7 +220,7 @@ export function buildEdgeIndex(root: MapCircle, view: GraphView): EdgeIndex {
     else touching.set(from, [{ other, out }]);
   };
 
-  for (const edge of view.edges) {
+  for (const edge of shape.links) {
     const from = chains.get(edge.source);
     const to = chains.get(edge.target);
     // A path in the edge list that is not in the node list is the backend's

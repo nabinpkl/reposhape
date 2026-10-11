@@ -1,7 +1,7 @@
 import { hierarchy, pack } from "d3-hierarchy";
 
 import { SCHEMES, discColor, type ColorScheme } from "@/features/graph/graphModel";
-import type { GraphView } from "@/generated/contracts";
+import type { Shape } from "@/features/map/shape";
 
 /**
  * The repo as nested circles: every file one dot, folders the circles around
@@ -42,13 +42,14 @@ export const COLLAPSE = 13;
  * colour proportion inside a folder can be read honestly, because no dot is
  * big enough to dominate the impression.
  *
- * `lines` sizes a dot by its file's length, so a folder is sized by how much
- * code is in it. Measured on a private monorepo, the two name different things as the
- * largest object in the repo, so neither is a refinement of the other.
+ * `size` sizes a dot by its item's own size, lines for a repo, so a folder is
+ * sized by how much code is in it. Measured on a private monorepo, the two
+ * name different things as the largest object in the repo, so neither is a
+ * refinement of the other.
  */
-export type Sizing = "files" | "lines";
+export type Sizing = "files" | "size";
 
-/** A file with no import at all carries no community, so it gets the neutral. */
+/** An item in no group gets the neutral. */
 const ISOLATED_CLUSTER = -1;
 
 export interface MapCircle {
@@ -65,15 +66,15 @@ export interface MapCircle {
   ink: string;
   /** Files at or under this circle. */
   files: number;
-  /** Zero for a folder. */
-  lines: number;
+  /** The item's size (lines for a repo). Zero for a folder. */
+  size: number;
   children: MapCircle[];
 }
 
 interface Building {
   name: string;
   path: string;
-  lines: number;
+  size: number;
   cluster: number;
   children: Map<string, Building>;
 }
@@ -81,7 +82,7 @@ interface Building {
 interface Packed {
   name: string;
   path: string;
-  lines: number;
+  size: number;
   cluster: number;
   children?: Packed[];
 }
@@ -94,19 +95,12 @@ interface Packed {
  */
 const PADDING: Record<Sizing, readonly number[]> = {
   files: [14, 8, 4.5, 2.4, 1.7],
-  lines: [16, 9, 5, 2.8, 2],
+  size: [16, 9, 5, 2.8, 2],
 };
 
-/**
- * A floor on a file's area in `lines` mode. Without it a twelve-line module is
- * a dot too small to see beside a three-thousand-line one, and the map stops
- * being able to say that the small file exists.
- */
-const MIN_LINES = 70;
-
-function build(view: GraphView): Packed {
-  const root: Building = { name: "", path: "", lines: 0, cluster: ISOLATED_CLUSTER, children: new Map() };
-  for (const node of view.nodes) {
+function build(shape: Shape): Packed {
+  const root: Building = { name: "", path: "", size: 0, cluster: ISOLATED_CLUSTER, children: new Map() };
+  for (const node of shape.items) {
     let current = root;
     let prefix = "";
     const segments = node.path.split("/");
@@ -114,16 +108,13 @@ function build(view: GraphView): Packed {
       prefix = prefix ? `${prefix}/${segment}` : segment;
       let child = current.children.get(segment);
       if (!child) {
-        child = { name: segment, path: prefix, lines: 0, cluster: ISOLATED_CLUSTER, children: new Map() };
+        child = { name: segment, path: prefix, size: 0, cluster: ISOLATED_CLUSTER, children: new Map() };
         current.children.set(segment, child);
       }
       current = child;
       if (index === segments.length - 1) {
-        current.lines = node.lines;
-        // Degree zero is the backend's trailing "(no imports)" bucket, which is
-        // an absence of community rather than a community.
-        current.cluster =
-          node.in_degree + node.out_degree === 0 ? ISOLATED_CLUSTER : node.cluster;
+        current.size = node.size;
+        current.cluster = node.group ?? ISOLATED_CLUSTER;
       }
     });
   }
@@ -131,16 +122,16 @@ function build(view: GraphView): Packed {
   const freeze = (node: Building): Packed => ({
     name: node.name,
     path: node.path,
-    lines: node.lines,
+    size: node.size,
     cluster: node.cluster,
     children: node.children.size > 0 ? [...node.children.values()].map(freeze) : undefined,
   });
   return freeze(root);
 }
 
-export function packView(view: GraphView, sizing: Sizing, scheme: ColorScheme): MapCircle {
+export function packView(shape: Shape, sizing: Sizing, scheme: ColorScheme): MapCircle {
   const colors = SCHEMES[scheme];
-  const paletteOf = new Map(view.clusters.map((cluster) => [cluster.id, cluster.color]));
+  const paletteOf = new Map(shape.groups.map((cluster) => [cluster.id, cluster.color]));
   // Cluster discs go through full value the way the graph canvas draws them,
   // so the same file is the same colour in both tabs. Isolates deliberately do
   // NOT: full value takes the neutral to near-white, which is the selection
@@ -152,9 +143,9 @@ export function packView(view: GraphView, sizing: Sizing, scheme: ColorScheme): 
       ? colors.isolated
       : discColor(paletteOf.get(cluster) ?? colors.fallback, scheme);
 
-  const tree = hierarchy<Packed>(build(view), (node) => node.children)
+  const tree = hierarchy<Packed>(build(shape), (node) => node.children)
     .sum((node) =>
-      node.children ? 0 : sizing === "files" ? 1 : Math.max(node.lines || 1, MIN_LINES),
+      node.children ? 0 : sizing === "files" ? 1 : Math.max(node.size || 1, shape.sizeFloor),
     )
     .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
 
@@ -203,7 +194,7 @@ export function packView(view: GraphView, sizing: Sizing, scheme: ColorScheme): 
       isFile,
       ink,
       files: isFile ? 1 : children.reduce((total, child) => total + child.files, 0),
-      lines: isFile ? node.data.lines : 0,
+      size: isFile ? node.data.size : 0,
       children,
     };
   };
