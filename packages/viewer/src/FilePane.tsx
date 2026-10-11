@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
-import { CodeBlock } from "./CodeBlock";
+import { CodeBlock, splitLines } from "./CodeBlock";
 import type { ColorScheme } from "./colors";
 import type { FileContent } from "./fileContent";
 
@@ -86,7 +86,7 @@ export function FilePane({ path, load, onClose, theme = "dark", children, classN
 
       {content ? (
         <div className="rs-pane-meta">
-          {content.kind === "text" ? <span>{plural(lineCount(content.text), "line")}</span> : null}
+          {content.kind === "text" ? <span>{plural(splitLines(content.text).length, "line")}</span> : null}
           {content.size !== undefined ? <span>{formatBytes(content.size)}</span> : null}
           {content.kind === "text" && content.truncated ? (
             <span className="rs-warn">only the start is shown</span>
@@ -105,13 +105,6 @@ export function FilePane({ path, load, onClose, theme = "dark", children, classN
       </div>
     </section>
   );
-}
-
-/** Lines as an editor counts them: a trailing newline ends the last line rather than starting one. */
-function lineCount(text: string): number {
-  if (text === "") return 0;
-  const breaks = text.split("\n").length - 1;
-  return text.endsWith("\n") ? breaks : breaks + 1;
 }
 
 function plural(count: number, noun: string): string {

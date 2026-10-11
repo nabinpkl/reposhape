@@ -77,7 +77,7 @@ export function CodeBlock({
     // need no placeholder.
     <div className="rs-viewer rs-code" data-theme={theme}>
       <pre className="rs-plain">
-        {text.split("\n").map((line, index) => (
+        {splitLines(text).map((line, index) => (
           <div key={index} className="rs-plain-line">
             <span aria-hidden className="rs-gutter">
               {index + 1}
@@ -88,4 +88,15 @@ export function CodeBlock({
       </pre>
     </div>
   );
+}
+
+/**
+ * A file's lines as an editor counts them: a trailing newline ends the last
+ * line rather than starting another, which is also what shiki draws.
+ */
+export function splitLines(text: string): string[] {
+  if (text === "") return [];
+  const lines = text.split("\n");
+  if (text.endsWith("\n")) lines.pop();
+  return lines;
 }
