@@ -71,8 +71,9 @@ jobs:
       - name: Gate
         run: just check-contracts check-viewer
 
+      # npm pack writes into --pack-destination but does not create it.
       - name: Pack
-        run: cd packages/viewer && npm pack --pack-destination ../../dist-viewer
+        run: mkdir -p dist-viewer && cd packages/viewer && npm pack --pack-destination ../../dist-viewer
 
       - name: Keep the tarball
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
