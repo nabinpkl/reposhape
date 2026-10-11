@@ -116,5 +116,7 @@ jobs:
           name: viewer-tarball
           path: dist-viewer/
 
+      # `./` is load-bearing: without it npm reads `dist-viewer/x.tgz` as a
+      # GitHub `user/repo` shorthand and tries to clone it.
       - name: Publish to npm
-        run: npm publish --access public dist-viewer/*.tgz
+        run: npm publish --access public ./dist-viewer/*.tgz
