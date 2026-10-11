@@ -1,5 +1,5 @@
-import { COLLAPSE, type MapCircle } from "@/features/map/mapLayout";
-import type { Shape } from "@/features/map/shape";
+import { COLLAPSE, type MapCircle } from "./mapLayout";
+import type { Shape } from "./shape";
 
 /**
  * The map's edges, and the filter that makes them worth drawing.

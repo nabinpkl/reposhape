@@ -26,9 +26,12 @@ RUN corepack enable && corepack prepare pnpm@11.15.1 --activate
 # contain the reviewed dependency set.
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY frontend/package.json ./frontend/
+COPY packages/viewer/package.json ./packages/viewer/
 RUN --mount=type=cache,target=/pnpm-store \
     pnpm install --frozen-lockfile --store-dir /pnpm-store
 
+COPY packages/viewer ./packages/viewer
+RUN cd packages/viewer && pnpm build
 COPY frontend ./frontend
 COPY tools/third_party_notices.mjs ./tools/
 RUN cd frontend && REPOSHAPE_WEB_EXPORT=1 pnpm exec next build \

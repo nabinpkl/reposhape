@@ -1,12 +1,11 @@
 import type { HighlighterCore } from "shiki/core";
 
 /**
- * One highlighter for the app, created on first use.
+ * One highlighter per page, created on the first file shown.
  *
  * Shiki compiles a grammar per language, so creating one per file view would
- * re-pay that on every click. The languages are the ones
- * the analyser can produce plus the assets it reports; anything else renders as
- * plain text rather than failing.
+ * re-pay that on every click. The languages are the source and asset kinds
+ * reposhape analyses; anything else renders as plain text rather than failing.
  */
 const GRAMMARS = {
   typescript: () => import("shiki/langs/typescript.mjs"),
@@ -42,9 +41,8 @@ let pending: Promise<HighlighterCore> | null = null;
 /**
  * Fine-grained rather than `import("shiki")`: the full bundle puts every
  * grammar and theme shiki has into the static export as its own chunk, about
- * three hundred files the page never loads, all of which the Python package
- * then ships and its third-party notices would have to answer for. These are
- * the only grammars and themes that reach the export.
+ * three hundred files a page never loads. These are the only grammars and
+ * themes a consumer's bundle gets, each as a chunk loaded on first use.
  */
 export function highlighter(): Promise<HighlighterCore> {
   if (!pending) {
@@ -57,7 +55,7 @@ export function highlighter(): Promise<HighlighterCore> {
           ],
           langs: Object.values(GRAMMARS).map((load) => load()),
           // Not the Oniguruma WASM engine: compiling WASM needs a CSP that
-          // allows 'wasm-unsafe-eval', and the page's CSP does not (api.py).
+          // allows 'wasm-unsafe-eval', which a strict page policy does not.
           // Strict, so a grammar this engine cannot run fails loudly here.
           engine: createJavaScriptRegexEngine(),
         }),

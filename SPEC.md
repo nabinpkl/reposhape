@@ -22,6 +22,7 @@ measured (langchain, hermes-agent, opencode) are named.
 | Rendering | `sigma` 3.0.3 + `graphology` 0.26.0 + `@react-sigma/core` 5.0.6 | npm registry, checked 2026-09-11 |
 | Layout | `graphology-layout-forceatlas2` 0.10.1 | last published 2022-10-17, see ADR-0003 |
 | Code pane | `shiki` | 4.4.2 |
+| Folder views | `reposhape-viewer` (`packages/viewer`, ADR-0016): `d3-hierarchy` packing, one 2D canvas, built by `tsdown` | tsdown 0.23.0, pinned |
 
 ## The tree-sitter API, as measured
 
@@ -148,7 +149,9 @@ data once; each tab says only how it is drawn.
 - **Files**: this tool's own extraction, files and the imports between them.
   - `import graph`: sigma, ForceAtlas2, a dot per file and a line per import.
   - `folders`: the same `GraphView`, each file packed into the circles of its
-    folders, on one 2D canvas rather than through sigma.
+    folders, on one 2D canvas rather than through sigma. Drawn by the viewer
+    package (ADR-0016), which the repo's view reaches through
+    `features/map/fromGraphView.ts`.
     `docs/graph-rendering.md` records why it is not sigma and what a dot's
     area is allowed to mean.
   - `folders · size`: the same, a dot's area being the file's line count.
@@ -369,8 +372,29 @@ the repo, and rules that matched nothing.
 - `features/graph/` sigma canvas, ForceAtlas2 worker, focus and isolate.
 - `features/filter-tree/` nested `<details>` path tree, tri-state checkboxes at
   every folder and every file.
-- `features/file-view/` on-demand code pane with shiki highlighting.
+- `features/file-view/` the repo's file pane: license, runtime links, dim and
+  hide, around the viewer package's `CodeBlock`.
+- `features/map/` the folder map for a repo: `fromGraphView` turns a
+  `GraphView` into the package's `FolderData` (clusters as groups, lines as
+  size, imports as links), and `RepoFolderMap` wires it to the filter store,
+  the theme and import wording.
+- `features/folder-view/` `/view`: a folder picked or dropped in the browser,
+  read in the tab and never uploaded, drawn by the package's `FolderMap` and
+  `FilePane`, coloured by extension.
 - `lib/` api client, class-names.
+
+`packages/viewer/src/` (`reposhape-viewer` on npm, ADR-0016), imported by the
+app from its build:
+
+- `shape.ts` `FolderData` and `toShape`, where grouping, colours and the size
+  floor are decided. `palette.ts` is generated from the backend's models.
+- `mapLayout.ts`, `mapEdges.ts`, `FolderMap.tsx` the packing, the bundled
+  links and the canvas. Theme, selection, highlight and dimming are props.
+- `FilePane.tsx`, `CodeBlock.tsx`, `highlighter.ts`, `fileContent.ts` the
+  pane, shiki on the JavaScript regex engine, and `readBrowserFile`.
+- `FolderViewer.tsx` the views and the pane as one component.
+- `style.css` every colour a variable under `.rs-viewer`; `globals.css` maps
+  the app's tokens onto them.
 
 ### State ownership
 
@@ -397,7 +421,9 @@ seam. It is not duplicated into Query state.
 
 ## Gates
 
-`just check` = `check-backend` + `check-contracts` + `check-frontend`, and
+`just check` = `check-backend` + `check-contracts` + `check-viewer` +
+`check-frontend`. `check-viewer` type-checks and builds the npm package, runs
+its tests against the build, and pins the file list `npm pack` would publish.
 `check-frontend` builds the static export, so the shipped bundle is verified
 by the gate. `just up` is the daily command. `just web-export` rebuilds the
 bundle `reposhape up` serves; `just web` is the hot-reloading dev server for frontend

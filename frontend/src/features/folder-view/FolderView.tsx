@@ -1,21 +1,26 @@
 "use client";
 
 import { FolderOpen, Loader2, Menu } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import {
+  FilePane,
+  FolderMap,
+  readBrowserFile,
+  toShape,
+  type FolderData,
+  type Sizing,
+} from "reposhape-viewer";
 
 import { ClusterLegend } from "@/features/filters/ClusterLegend";
 import { HighlightSearch } from "@/features/filters/HighlightSearch";
 import { useFilters } from "@/features/filters/filterStore";
-import { LocalFilePane } from "@/features/folder-view/LocalFilePane";
-import { folderShape } from "@/features/folder-view/folderShape";
 import {
   MAX_FILES,
   fromDirectoryEntry,
   fromFileList,
   type PickedFolder,
 } from "@/features/folder-view/readFolder";
-import { MapCanvas } from "@/features/map/MapCanvas";
-import type { Sizing } from "@/features/map/mapLayout";
 import { Group, Tab } from "@/features/repo/RendererTabs";
 import { AppShell, PaneHeading, ScrollPane } from "@/features/shell/AppShell";
 import { ThemeToggle } from "@/features/theme/ThemeToggle";
@@ -41,8 +46,46 @@ export function FolderView() {
   const picker = useRef<HTMLInputElement>(null);
   const clearView = useFilters((state) => state.clearView);
   const clearDimmed = useFilters((state) => state.clearDimmed);
+  const focusedPath = useFilters((state) => state.focusedPath);
+  const setFocus = useFilters((state) => state.setFocus);
+  const search = useFilters((state) => state.search);
+  const dimmed = useFilters((state) => state.dimmed);
+  const { resolvedTheme } = useTheme();
+  const theme = resolvedTheme === "light" ? "light" : "dark";
 
-  const shape = useMemo(() => (folder ? folderShape(folder) : null), [folder]);
+  // Every file a dot sized by its bytes, grouped by extension (the viewer's
+  // default when no group is given).
+  const data = useMemo<FolderData | null>(
+    () =>
+      folder
+        ? {
+            files: [...folder.files].map(([path, file]) => ({ path, size: file.size })),
+            sizeLabel: "bytes",
+          }
+        : null,
+    [folder],
+  );
+  const shape = useMemo(() => (data ? toShape(data) : null), [data]);
+  // The legend reads the wire's cluster shape; the groups carry the same facts.
+  const kinds = useMemo(
+    () =>
+      shape?.groups.map((group) => ({
+        id: group.id,
+        label: group.label,
+        color: group.color,
+        size: group.size,
+        distinct_color: group.distinct,
+      })) ?? [],
+    [shape],
+  );
+  const loadFile = useCallback(
+    (path: string) => {
+      const file = folder?.files.get(path);
+      if (!file) return Promise.reject(new Error(`${path} is not in the open folder.`));
+      return readBrowserFile(file);
+    },
+    [folder],
+  );
   const folders = useMemo(() => {
     if (!folder) return 0;
     const seen = new Set<string>();
@@ -104,7 +147,6 @@ export function FolderView() {
     return () => window.removeEventListener("keydown", onKey);
   }, [openPath, clearView, sidebarOpen]);
 
-  const openFile = openPath ? folder?.files.get(openPath) : undefined;
 
   return (
     <AppShell
@@ -175,7 +217,7 @@ export function FolderView() {
           <PaneHeading>Kinds of file</PaneHeading>
           <ScrollPane>
             {shape ? (
-              <ClusterLegend clusters={shape.groups} noun="kinds" />
+              <ClusterLegend clusters={kinds} noun="kinds" />
             ) : (
               <p className="px-3 py-2 text-[12px] text-faint italic">No folder open.</p>
             )}
@@ -209,16 +251,22 @@ export function FolderView() {
           }}
           onDrop={onDrop}
         >
-          {shape ? (
-            <MapCanvas
-              shape={shape}
-              sizing={sizing}
-              edges={false}
-              onOpenFile={setOpenPath}
-              onDismiss={() => setOpenPath(null)}
-            />
+          {data ? (
+            <div className="absolute inset-0">
+              <FolderMap
+                data={data}
+                sizing={sizing}
+                theme={theme}
+                selected={focusedPath}
+                onSelect={setFocus}
+                highlight={search}
+                dimmed={dimmed}
+                onOpenFile={setOpenPath}
+                onDismiss={() => setOpenPath(null)}
+              />
+            </div>
           ) : null}
-          {!shape && !reading ? (
+          {!data && !reading ? (
             <div className="pointer-events-none absolute inset-0 grid place-items-center p-4">
               <p className="max-w-sm text-center text-[13px] text-muted">
                 Drop a folder here, or open one. It is read in this tab and never leaves it.
@@ -233,8 +281,8 @@ export function FolderView() {
         </div>
       }
       aside={
-        openPath && openFile ? (
-          <LocalFilePane path={openPath} file={openFile} onClose={() => setOpenPath(null)} />
+        openPath ? (
+          <FilePane className="min-h-0 flex-1" path={openPath} load={loadFile} onClose={() => setOpenPath(null)} theme={theme} />
         ) : undefined
       }
     />

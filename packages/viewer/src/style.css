@@ -1,0 +1,263 @@
+/*
+ * reposhape-viewer's stylesheet. Import it once: `import "reposhape-viewer/style.css"`.
+ *
+ * Every rule hangs off `.rs-viewer`, and every colour is a variable on it, so
+ * restyling is overriding variables rather than selectors. The canvas itself
+ * takes its colours from the `theme` prop, not from these.
+ */
+.rs-viewer {
+  --rs-canvas: #0f0f1a;
+  --rs-panel: #1a1a2e;
+  --rs-line: #2a2a4e;
+  --rs-line-strong: #3a3a5e;
+  --rs-fg: #e0e0e0;
+  --rs-muted: #9a9ab0;
+  --rs-faint: #5c5c72;
+  --rs-accent: #4e79a7;
+  --rs-danger: #f87171;
+  --rs-warn: #fbbf24;
+  --rs-font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --rs-font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --rs-aside-width: 520px;
+  color: var(--rs-fg);
+  font-family: var(--rs-font);
+  box-sizing: border-box;
+}
+.rs-viewer *,
+.rs-viewer *::before,
+.rs-viewer *::after {
+  box-sizing: inherit;
+}
+.rs-viewer[data-theme="light"] {
+  --rs-canvas: #eef0f4;
+  --rs-panel: #ffffff;
+  --rs-line: #dfe3ea;
+  --rs-line-strong: #c3cad6;
+  --rs-fg: #1f2328;
+  --rs-muted: #59636e;
+  --rs-faint: #9aa1b2;
+  --rs-accent: #34618f;
+  --rs-danger: #b42318;
+  --rs-warn: #a16207;
+}
+
+/* FolderViewer: a view switch over the map, the file pane beside or below. */
+.rs-folder-viewer {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--rs-canvas);
+}
+.rs-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  align-self: flex-start;
+  margin: 8px;
+  padding: 1px;
+  border: 1px solid var(--rs-line-strong);
+  border-radius: 4px;
+  background: var(--rs-panel);
+}
+.rs-tab {
+  appearance: none;
+  border: 0;
+  border-radius: 3px;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--rs-muted);
+  font: 11.5px var(--rs-font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms, color 120ms;
+}
+.rs-tab:hover {
+  background: color-mix(in srgb, var(--rs-line) 60%, transparent);
+  color: var(--rs-fg);
+}
+.rs-tab:active,
+.rs-tab[aria-pressed="true"] {
+  background: var(--rs-line);
+  color: var(--rs-fg);
+}
+.rs-tab:focus-visible,
+.rs-icon-button:focus-visible {
+  outline: 2px solid var(--rs-accent);
+  outline-offset: 1px;
+}
+.rs-stage {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.rs-map {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.rs-folder-viewer .rs-aside {
+  width: min(var(--rs-aside-width), 50%);
+  border-left: 1px solid var(--rs-line);
+}
+@container (max-width: 720px) {
+  .rs-stage {
+    flex-direction: column;
+  }
+  .rs-folder-viewer .rs-aside {
+    width: auto;
+    height: 55%;
+    border-left: 0;
+    border-top: 1px solid var(--rs-line);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rs-tab {
+    transition: none;
+  }
+}
+
+/* FilePane */
+.rs-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--rs-panel);
+  font-size: 13px;
+}
+.rs-pane-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rs-line);
+}
+.rs-pane-heading {
+  min-width: 0;
+}
+.rs-pane-title {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rs-pane-path {
+  margin-top: 2px;
+  color: var(--rs-muted);
+  font-size: 11px;
+  word-break: break-all;
+}
+.rs-icon-button {
+  flex-shrink: 0;
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  padding: 4px;
+  background: transparent;
+  color: var(--rs-muted);
+  line-height: 0;
+  cursor: pointer;
+  transition: background-color 120ms, color 120ms;
+}
+.rs-icon-button:hover {
+  background: var(--rs-line);
+  color: var(--rs-fg);
+}
+.rs-pane-meta {
+  display: flex;
+  flex-shrink: 0;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--rs-line);
+  color: var(--rs-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.rs-warn {
+  color: var(--rs-warn);
+}
+.rs-pane-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--rs-canvas);
+}
+.rs-placeholder {
+  margin: 0;
+  padding: 12px;
+  color: var(--rs-faint);
+  font-size: 12px;
+}
+.rs-error {
+  color: var(--rs-danger);
+}
+.rs-image {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 12px;
+}
+
+/*
+ * CodeBlock: shiki's output, or plain lines, with the same gutter.
+ *
+ * Shiki wraps each line in `.line`, and the numbers are counters rather than
+ * injected markup: the HTML stays byte-identical to what shiki produced, and
+ * the numbers are unselectable, so copying code never grabs them. A file's
+ * trailing newline yields one empty last `.line` that is nobody's line, so it
+ * carries no number; genuinely empty lines in the middle keep theirs.
+ */
+.rs-code {
+  font: 11.5px/1.55 var(--rs-font-mono);
+}
+.rs-code pre {
+  margin: 0;
+  padding: 12px;
+  background: transparent !important;
+}
+.rs-code code {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  counter-reset: line;
+}
+.rs-code code .line::before {
+  content: counter(line);
+  counter-increment: line;
+  display: inline-block;
+  min-width: 2.5rem;
+  margin-right: 1rem;
+  color: var(--rs-faint);
+  text-align: right;
+  user-select: none;
+}
+.rs-code code .line:last-child:empty::before {
+  content: none;
+}
+.rs-plain {
+  width: max-content;
+  min-width: 100%;
+  color: var(--rs-fg);
+}
+.rs-plain-line {
+  display: flex;
+  white-space: pre;
+}
+.rs-gutter {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 2.5rem;
+  margin-right: 1rem;
+  color: var(--rs-faint);
+  text-align: right;
+  user-select: none;
+}

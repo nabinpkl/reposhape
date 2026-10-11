@@ -2,12 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 
 import { useGraphShape } from "@/features/filters/filterStore";
 import { SymbolGraph } from "@/features/graph/SymbolGraph";
-import { MapCanvas } from "@/features/map/MapCanvas";
-import { fromGraphView } from "@/features/map/shape";
+import { RepoFolderMap } from "@/features/map/RepoFolderMap";
 import { RendererTabs, isFramed, type Renderer } from "@/features/repo/RendererTabs";
 import { api } from "@/lib/api";
 
@@ -60,7 +59,6 @@ export function ComparePane({
     enabled: paneKey !== null && !isFramed(renderer),
   });
   const view = graph.data;
-  const mapShape = useMemo(() => (view ? fromGraphView(view) : null), [view]);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
@@ -79,9 +77,9 @@ export function ComparePane({
             {view && renderer === "import-graph" ? (
               <GraphCanvas view={view} onOpenFile={onOpenPaneFile} />
             ) : null}
-            {mapShape && renderer !== "import-graph" ? (
-              <MapCanvas
-                shape={mapShape}
+            {view && renderer !== "import-graph" ? (
+              <RepoFolderMap
+                view={view}
                 sizing={renderer === "folders-size" ? "size" : "files"}
                 edges={renderer === "folders-imports"}
                 onOpenFile={onOpenPaneFile}

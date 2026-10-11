@@ -47,13 +47,23 @@ install: web-export
     uv tool install --force --reinstall --from ./backend reposhape
 
 # The frontend's own dev server, with hot reload, proxying /api to `just serve`.
-web *args:
+# The viewer package is imported from its build: run `just viewer-dev` beside
+# this to rebuild it on change.
+web *args: build-viewer
     cd frontend && pnpm dev {{args}}
+
+# The viewer package (packages/viewer, published to npm as reposhape-viewer),
+# built to its dist/. The app imports that build exactly as any consumer would.
+build-viewer:
+    cd packages/viewer && pnpm build
+
+viewer-dev:
+    cd packages/viewer && pnpm dev
 
 # Build the browser client as static files and put them in the Python package,
 # where `reposhape up`, `reposhape serve` and the wheel all find them. Run after changing the
 # frontend; `reposhape up` warns when the copy is older than frontend/src.
-web-export:
+web-export: build-viewer
     cd frontend && REPOSHAPE_WEB_EXPORT=1 pnpm exec next build
     node tools/third_party_notices.mjs frontend/out/THIRD_PARTY_NOTICES.txt
     rsync -a --delete frontend/out/ backend/src/reposhape/web/
@@ -92,14 +102,24 @@ check-contracts:
 # Lint, types, and the static export the package ships. The export is built to
 # frontend/out and not copied, so the gate verifies the bundle without touching
 # what `reposhape up` is serving.
-check-frontend:
+# The npm package on its own: types, its build, its tests against that build,
+# and what `npm pack` would publish (ADR-0016).
+check-viewer:
+    # npm ships packages/viewer alone, so it carries its own copy of the LICENSE.
+    cmp LICENSE packages/viewer/LICENSE
+    pnpm install --frozen-lockfile
+    cd packages/viewer && pnpm exec tsc --noEmit
+    cd packages/viewer && pnpm build
+    cd packages/viewer && pnpm test
+
+check-frontend: build-viewer
     pnpm install --frozen-lockfile
     cd frontend && pnpm exec eslint src
     cd frontend && pnpm exec tsc --noEmit
     cd frontend && REPOSHAPE_WEB_EXPORT=1 pnpm exec next build
     node tools/third_party_notices.mjs frontend/out/THIRD_PARTY_NOTICES.txt
 
-check: check-backend check-contracts check-frontend
+check: check-backend check-contracts check-viewer check-frontend
 
 # Resolved for the host (arm64 Linux, the image's Python) and wheels only, so
 # the image needs no compiler; hashed, so it can only install what was locked.

@@ -27,8 +27,9 @@ SCHEMA_VERSION = 5
 # Colour-blind-safe categorical ramp, carried over from the tool being replaced
 # so a familiar graph keeps familiar colours. Here rather than in graphing
 # because it is part of what the wire means: a cluster's `color` is one of
-# these, and the browser colours any other grouping (a folder's extensions)
-# from the same list, exported with the types.
+# these, and the viewer package colours any other grouping (a folder's
+# extensions) from the same list, which tools/export_contracts.py writes into
+# packages/viewer/src/palette.ts.
 PALETTE = (
     "#4E79A7",
     "#F28E2B",

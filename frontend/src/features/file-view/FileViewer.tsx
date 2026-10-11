@@ -2,10 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Ban, ExternalLink, Eye, EyeOff, RotateCcw, X } from "lucide-react";
+import { useTheme } from "next-themes";
+import { CodeBlock } from "reposhape-viewer";
 
 import { useFilters } from "@/features/filters/filterStore";
 import { ScrollPane } from "@/features/shell/AppShell";
-import { CodeBlock } from "@/features/file-view/CodeBlock";
 import { LicenseNotice } from "@/features/file-view/LicenseNotice";
 import { RuntimeLinks } from "@/features/file-view/RuntimeLinks";
 import { api } from "@/lib/api";
@@ -47,6 +48,7 @@ export function FileViewer({
   const isExcluded = useFilters((state) => state.excluded.has(path));
   const setExcluded = useFilters((state) => state.setExcluded);
   const setFocus = useFilters((state) => state.setFocus);
+  const { resolvedTheme } = useTheme();
 
   const segments = path.split("/");
   const name = segments.at(-1) ?? path;
@@ -129,7 +131,7 @@ export function FileViewer({
         </button>
       </div>
 
-      {data ? <CodeBlock path={data.path} text={data.text} /> : null}
+      {data ? <CodeBlock path={data.path} text={data.text} theme={resolvedTheme === "light" ? "light" : "dark"} /> : null}
       </ScrollPane>
     </>
   );

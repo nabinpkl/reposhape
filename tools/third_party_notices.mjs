@@ -37,10 +37,10 @@ const NOTICE_STEMS = ["notice"];
 
 // shiki's grammar and theme packages are MIT under shiki's own copyright, but
 // each grammar was written upstream under another. These are the upstream
-// holders for what highlighter.ts imports (the vue grammar pulls in html, css,
-// javascript, typescript, json and four vue sub-grammars), as listed by
-// shikijs/textmate-grammars-themes. Importing a new language means adding its
-// origin here.
+// holders for what packages/viewer/src/highlighter.ts imports (the vue grammar
+// pulls in html, css, javascript, typescript, json and four vue sub-grammars),
+// as listed by shikijs/textmate-grammars-themes. Importing a new language
+// means adding its origin here.
 const GRAMMAR_ORIGINS = `Language grammars and colour themes bundled through @shikijs/langs and
 @shikijs/themes (MIT License, full text above), written upstream as:
 
@@ -65,6 +65,13 @@ function directDependencies() {
 function shipped(direct) {
   const found = new Map();
   const walk = (name, node, descend = true) => {
+    // A workspace package (the viewer, `link:../packages/viewer`) is this
+    // repo's own code under its own LICENSE, not third-party software. What
+    // it depends on is, so it is walked through rather than listed.
+    if (node.version.startsWith("link:")) {
+      for (const [child, childNode] of Object.entries(node.dependencies ?? {})) walk(child, childNode);
+      return;
+    }
     const key = `${name}@${node.version}`;
     if (found.has(key)) return;
     found.set(key, { name, version: node.version, path: node.path });

@@ -1,0 +1,49 @@
+{
+  "name": "reposhape-viewer",
+  "version": "0.1.0",
+  "description": "Any tree of files as nested circles, with a file pane. React components from reposhape.",
+  "license": "MIT",
+  "author": "nabinpkl",
+  "homepage": "https://github.com/nabinpkl/reposhape/tree/main/packages/viewer#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nabinpkl/reposhape.git",
+    "directory": "packages/viewer"
+  },
+  "bugs": "https://github.com/nabinpkl/reposhape/issues",
+  "keywords": ["react", "circle-packing", "file-tree", "visualization", "folders", "code-viewer"],
+  "type": "module",
+  "sideEffects": ["*.css"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./style.css": "./dist/style.css",
+    "./package.json": "./package.json"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "dependencies": {
+    "d3-hierarchy": "^3.1.2",
+    "shiki": "^4.4.2"
+  },
+  "devDependencies": {
+    "@types/d3-hierarchy": "^3.1.7",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "tsdown": "0.23.0",
+    "typescript": "^5"
+  }
+}

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { Providers } from "@/app/providers";
 
+import "reposhape-viewer/style.css";
 import "@/app/globals.css";
 
 export const metadata: Metadata = {

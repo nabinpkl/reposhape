@@ -9,8 +9,8 @@
  * Two schemes, one token set. `:root` is dark; `html.light` (the class
  * next-themes puts on <html> when the resolved theme is light) redefines the
  * same tokens, so every component flips without a single `dark:` variant.
- * The graph canvas follows separately through graphModel's SCHEMES, because
- * its colours are pre-composited data, not CSS.
+ * The canvases follow separately through the viewer package's SCHEMES,
+ * because their colours are pre-composited data, not CSS.
  */
 @theme {
   --color-canvas: #0f0f1a;
@@ -82,26 +82,20 @@ body {
 }
 
 /*
- * Line numbers for Shiki output, which wraps each line in `.line`. Counters
- * rather than injected markup: the HTML stays byte-identical to what Shiki
- * produced, and the numbers are unselectable so copying code never grabs them.
- * A file's trailing newline yields one empty last `.line` that is nobody's
- * line, so it carries no number; genuinely empty lines in the middle keep
- * theirs. Width matches the fallback gutter in FileViewer (w-10 + mr-4).
+ * The viewer package (packages/viewer) styles its file pane and code from
+ * variables of its own. Pointed at this app's tokens, so the pane looks like
+ * the rest of the page and flips with it. `[data-theme]` matches the
+ * package's own theme rule, so these win whichever theme it is told.
  */
-.code-lines code {
-  counter-reset: line;
-}
-.code-lines code .line::before {
-  content: counter(line);
-  counter-increment: line;
-  display: inline-block;
-  min-width: 2.5rem;
-  margin-right: 1rem;
-  text-align: right;
-  color: var(--color-faint);
-  user-select: none;
-}
-.code-lines code .line:last-child:empty::before {
-  content: none;
+:root .rs-viewer[data-theme] {
+  --rs-canvas: var(--color-canvas);
+  --rs-panel: var(--color-panel);
+  --rs-line: var(--color-line);
+  --rs-line-strong: var(--color-line-strong);
+  --rs-fg: var(--color-fg);
+  --rs-muted: var(--color-muted);
+  --rs-faint: var(--color-faint);
+  --rs-accent: var(--color-accent);
+  --rs-danger: var(--color-danger);
+  --rs-font-mono: var(--font-mono);
 }

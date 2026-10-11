@@ -1,5 +1,6 @@
 packages:
   - frontend
+  - packages/viewer
 
 # Build scripts denied deliberately. sharp's native
 # postinstall only serves production image optimization, which this app does not

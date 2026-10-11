@@ -2,7 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import type { LinkSummary } from "reposhape-viewer";
 
 import { FileViewer } from "@/features/file-view/FileViewer";
 import { ClusterLegend } from "@/features/filters/ClusterLegend";
@@ -12,9 +13,7 @@ import { ShapeControls } from "@/features/filters/ShapeControls";
 import { useFilters, useGraphShape } from "@/features/filters/filterStore";
 import { NodeInfo } from "@/features/graph/NodeInfo";
 import { SymbolGraph } from "@/features/graph/SymbolGraph";
-import type { EdgeSummary } from "@/features/map/mapEdges";
-import { MapCanvas } from "@/features/map/MapCanvas";
-import { fromGraphView } from "@/features/map/shape";
+import { RepoFolderMap } from "@/features/map/RepoFolderMap";
 import { isFramed } from "@/features/repo/RendererTabs";
 import { RepoBar, type Renderer } from "@/features/repo/RepoBar";
 import { useReadOnly } from "@/features/repo/serverMode";
@@ -84,7 +83,7 @@ export function Workspace() {
   // it, and it is reported up because the question it answers -- what counts
   // as leaving a package -- belongs beside the other counts rather than in a
   // tooltip on one dot.
-  const [edgeSummary, setEdgeSummary] = useState<EdgeSummary | null>(null);
+  const [edgeSummary, setEdgeSummary] = useState<LinkSummary | null>(null);
   // The toggle owns visibility outright: opening a file raises the panel,
   // and lowering the toggle drops the file with it, so the button never
   // lies about what is on screen.
@@ -203,8 +202,6 @@ export function Workspace() {
   }, [openFile, clearView, sidebarOpen]);
 
   const view = graph.data;
-  // One shape per view, so a repaint never re-packs the map.
-  const mapShape = useMemo(() => (view ? fromGraphView(view) : null), [view]);
   // The framed symbol graph hides the sidebar controls: it carries its own
   // sidebar and legend, so our filters, focus and file pane do not apply.
   const framed = isFramed(renderer) && analysisKey !== null;
@@ -314,9 +311,9 @@ export function Workspace() {
           {view && renderer === "import-graph" ? (
             <GraphCanvas view={view} onOpenFile={onOpenFilePrimary} />
           ) : null}
-          {mapShape && renderer !== "import-graph" ? (
-            <MapCanvas
-              shape={mapShape}
+          {view && renderer !== "import-graph" ? (
+            <RepoFolderMap
+              view={view}
               sizing={renderer === "folders-size" ? "size" : "files"}
               edges={renderer === "folders-imports"}
               onOpenFile={onOpenFilePrimary}
@@ -347,7 +344,7 @@ function StatsFooter({
   edges,
 }: {
   view: { stats: { visible_files: number; total_files: number; visible_edges: number; clusters: number } };
-  edges: EdgeSummary | null;
+  edges: LinkSummary | null;
 }) {
   const { stats } = view;
   return (

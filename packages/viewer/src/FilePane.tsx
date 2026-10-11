@@ -1,156 +1,125 @@
-"use client";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
-import { ExternalLink, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CodeBlock } from "./CodeBlock";
+import type { ColorScheme } from "./colors";
+import type { FileContent } from "./fileContent";
 
-import { CodeBlock } from "@/features/file-view/CodeBlock";
-import { ScrollPane } from "@/features/shell/AppShell";
-import { cn } from "@/lib/class-names";
-
-/**
- * Text past this is cut for display. The pane is for reading a file, and half
- * a megabyte is already more than anyone scrolls; the whole file is still on
- * the reader's own disk.
- */
-const MAX_TEXT_BYTES = 512 * 1024;
-
-/**
- * How far in to look for a NUL byte, git's own test for "binary". A text file
- * has none, and almost every binary format has one in its first block.
- */
-const SNIFF_BYTES = 8000;
-
-type Contents =
-  | { kind: "text"; text: string; lines: number; truncated: boolean }
-  | { kind: "image"; url: string }
-  | { kind: "binary" };
-
-/**
- * One file of a picked folder, read in this tab. The same pane as a repo's
- * file, minus what only an analysis knows (license, runtime links, hiding it
- * from the clustering).
- */
-export function LocalFilePane({
-  path,
-  file,
-  onClose,
-}: {
+export interface FilePaneProps {
+  /** The file's path, slash-separated. Its last segment is the title. */
   path: string;
-  file: File;
-  onClose: () => void;
-}) {
-  // Keyed by the file it was read from, so a slow read of the previous file
-  // can never paint over the one now open.
-  const [read, setRead] = useState<{ file: File; contents: Contents } | { file: File; error: string } | null>(
-    null,
-  );
+  /**
+   * Where the content comes from. Called again when `path` or `load`
+   * changes, so keep it stable (a `useCallback`) unless a change is meant.
+   */
+  load: (path: string) => Promise<FileContent>;
+  /** Shows a close button when given. */
+  onClose?: () => void;
+  theme?: ColorScheme;
+  /** Rows of your own between the meta line and the content. */
+  children?: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+}
+
+/**
+ * One file, beside the map: its name, where it lives, how big it is, and the
+ * file itself as highlighted text, an image, or a line saying it is binary.
+ */
+export function FilePane({ path, load, onClose, theme = "dark", children, className, style }: FilePaneProps) {
+  // Keyed by the path and loader it was read with, so a slow read of the
+  // previous file can never paint over the one now open.
+  const [read, setRead] = useState<
+    | { path: string; load: FilePaneProps["load"]; content: FileContent }
+    | { path: string; load: FilePaneProps["load"]; error: string }
+    | null
+  >(null);
 
   useEffect(() => {
     let live = true;
-    let url: string | null = null;
-    const done = (value: { contents: Contents } | { error: string }) => {
-      if (live) setRead({ file, ...value });
-    };
-    if (file.type.startsWith("image/")) {
-      // An <img> never runs what it shows, an SVG's scripts included, so an
-      // object URL is safe to hand it; the page's CSP allows `blob:` images.
-      url = URL.createObjectURL(file);
-      done({ contents: { kind: "image", url } });
-    } else {
-      file
-        .slice(0, MAX_TEXT_BYTES)
-        .arrayBuffer()
-        .then((buffer) => {
-          const bytes = new Uint8Array(buffer);
-          if (bytes.subarray(0, SNIFF_BYTES).includes(0)) {
-            done({ contents: { kind: "binary" } });
-            return;
-          }
-          const text = new TextDecoder().decode(bytes);
-          done({
-            contents: {
-              kind: "text",
-              text,
-              lines: text.split("\n").length,
-              truncated: file.size > MAX_TEXT_BYTES,
-            },
-          });
-        })
-        .catch((error: unknown) => done({ error: String(error) }));
-    }
+    let loaded: FileContent | null = null;
+    load(path).then(
+      (content) => {
+        loaded = content;
+        if (live) setRead({ path, load, content });
+        else if (content.kind === "image") content.dispose?.();
+      },
+      (error: unknown) => {
+        if (live) setRead({ path, load, error: error instanceof Error ? error.message : String(error) });
+      },
+    );
     return () => {
       live = false;
-      if (url) URL.revokeObjectURL(url);
+      if (loaded?.kind === "image") loaded.dispose?.();
     };
-  }, [file]);
+  }, [path, load]);
 
-  const current = read?.file === file ? read : null;
-  const contents = current && "contents" in current ? current.contents : null;
-  const segments = path.split("/");
-  const name = segments.at(-1) ?? path;
+  const current = read?.path === path && read.load === load ? read : null;
+  const content = current && "content" in current ? current.content : null;
+  const name = path.split("/").at(-1) ?? path;
 
   return (
-    <>
-      <header className="flex shrink-0 items-start justify-between gap-2 border-b border-line px-3 py-2.5">
-        <div className="min-w-0">
-          <div className="truncate font-medium text-fg" title={path}>
+    <section className={["rs-viewer rs-pane", className].filter(Boolean).join(" ")} data-theme={theme} style={style}>
+      <header className="rs-pane-header">
+        <div className="rs-pane-heading">
+          <div className="rs-pane-title" title={path}>
             {name}
           </div>
-          <div className="mt-0.5 break-all text-[11px] text-muted">{path}</div>
+          <div className="rs-pane-path">{path}</div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close file"
-          className="shrink-0 rounded p-1 text-muted transition-colors hover:bg-line hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"
-        >
-          <X className="size-4" />
-        </button>
+        {onClose ? (
+          <button type="button" onClick={onClose} aria-label="Close file" className="rs-icon-button">
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              aria-hidden
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        ) : null}
       </header>
 
-      <div className="flex shrink-0 items-center gap-3 border-b border-line px-3 py-1.5 text-[11px] text-faint">
-        {contents?.kind === "text" ? <span>{contents.lines.toLocaleString()} lines</span> : null}
-        <span>{formatBytes(file.size)}</span>
-        {contents?.kind === "text" && contents.truncated ? (
-          <span className="flex items-center gap-1 text-amber-400">
-            <ExternalLink className="size-3" />
-            first {formatBytes(MAX_TEXT_BYTES)} shown
-          </span>
-        ) : null}
-      </div>
+      {content ? (
+        <div className="rs-pane-meta">
+          {content.kind === "text" ? <span>{plural(lineCount(content.text), "line")}</span> : null}
+          {content.size !== undefined ? <span>{formatBytes(content.size)}</span> : null}
+          {content.kind === "text" && content.truncated ? (
+            <span className="rs-warn">only the start is shown</span>
+          ) : null}
+        </div>
+      ) : null}
 
-      <ScrollPane className="bg-canvas">
-        {!current ? <Placeholder>Reading…</Placeholder> : null}
-        {current && "error" in current ? (
-          <Placeholder tone="error">{current.error}</Placeholder>
-        ) : null}
-        {contents?.kind === "binary" ? <Placeholder>A binary file; nothing to show as text.</Placeholder> : null}
-        {contents?.kind === "image" ? (
-          // eslint-disable-next-line @next/next/no-img-element -- a local object URL, nothing for next/image to optimise
-          <img src={contents.url} alt={name} className="mx-auto block max-w-full p-3" />
-        ) : null}
-        {contents?.kind === "text" ? <CodeBlock path={path} text={contents.text} /> : null}
-      </ScrollPane>
-    </>
+      {children}
+
+      <div className="rs-pane-body">
+        {!current ? <p className="rs-placeholder">Loading…</p> : null}
+        {current && "error" in current ? <p className="rs-placeholder rs-error">{current.error}</p> : null}
+        {content?.kind === "binary" ? <p className="rs-placeholder">A binary file; nothing to show as text.</p> : null}
+        {content?.kind === "image" ? <img src={content.src} alt={name} className="rs-image" /> : null}
+        {content?.kind === "text" ? <CodeBlock path={path} text={content.text} theme={theme} /> : null}
+      </div>
+    </section>
   );
 }
 
-function formatBytes(bytes: number): string {
+/** Lines as an editor counts them: a trailing newline ends the last line rather than starting one. */
+function lineCount(text: string): number {
+  if (text === "") return 0;
+  const breaks = text.split("\n").length - 1;
+  return text.endsWith("\n") ? breaks : breaks + 1;
+}
+
+function plural(count: number, noun: string): string {
+  return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function Placeholder({
-  children,
-  tone = "muted",
-}: {
-  children: React.ReactNode;
-  tone?: "muted" | "error";
-}) {
-  return (
-    <p className={cn("p-3 text-[12px]", tone === "error" ? "text-danger" : "text-faint")}>
-      {children}
-    </p>
-  );
 }

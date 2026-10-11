@@ -73,6 +73,23 @@ have run `reposhape graphify-page` with graphify installed.
 The sidebar filters by tests, file type and folder, and the search box
 highlights matching files. The split button puts any two views side by side.
 
+`/view` draws any folder on your machine the same way, with no analysis: pick
+or drop it, and every file is a dot sized by its bytes and coloured by its
+extension. The folder is read in the browser tab and never leaves it.
+
+## In your own React app
+
+The folder views and the file pane are also an npm package,
+[`reposhape-viewer`](packages/viewer/README.md), for drawing anything that has
+folders and files in it:
+
+```tsx
+import { FolderViewer } from "reposhape-viewer";
+import "reposhape-viewer/style.css";
+
+<FolderViewer data={{ files: [{ path: "src/index.ts", size: 1200 }] }} loadFile={loadFile} />;
+```
+
 ## Commands
 
 | Command | What it does |
@@ -138,7 +155,7 @@ You need uv, pnpm and [just](https://github.com/casey/just).
 
 ```bash
 just install       # build the page and put `reposhape` on PATH from this checkout
-just check         # lint, types, tests, contracts and the static export
+just check         # lint, types, tests, contracts, the npm package and the static export
 just web           # frontend dev server with hot reload
 just web-export    # rebuild the page the Python package serves
 just package-smoke # build the wheel and sdist, install each and try it

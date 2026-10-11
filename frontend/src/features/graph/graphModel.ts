@@ -1,60 +1,12 @@
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
+import { SCHEMES, discColor, mixHex, type ColorScheme } from "reposhape-viewer";
 
 import type { GraphView } from "@/generated/contracts";
 
-/** Measured off graphify's rendered page. See docs/graph-rendering.md. */
-export type ColorScheme = "dark" | "light";
-
-/**
- * Everything about the canvas that is colour, per scheme. The chrome follows
- * CSS tokens; the canvas cannot, because its colours are pre-composited data
- * (edge ink is mixed against the ground by hand -- sigma's programs did not
- * visibly honour an rgba() alpha here). So a scheme change repaints data
- * colours in place (applySchemeColors) instead of rebuilding: positions never
- * move, the camera never resets, and no fetch fires.
- *
- * The two schemes are symmetric in derivation, not in values. Dark lifts discs
- * to full value because the palette arrives muted; light keeps the raw Tableau
- * 10, which was designed on white. Selection is the value no cluster can
- * claim on that ground: white on dark, near-black on light. Dimming moves
- * toward the canvas on both, never toward white, never toward black.
- */
-export const SCHEMES = {
-  dark: {
-    ground: "#0f0f1a",
-    dimNode: "#1e1e2b",
-    selected: "#ffffff",
-    label: "#c9c9d8",
-    labelFocused: "#ffffff",
-    hoverGround: "#141422",
-    isolated: "#ababaf",
-    fallback: "#5c5c72",
-    runtimeLink: "#e0a93e",
-  },
-  light: {
-    ground: "#eef0f4",
-    dimNode: "#dde1e9",
-    selected: "#11131a",
-    label: "#565b6b",
-    labelFocused: "#11131a",
-    hoverGround: "#ffffff",
-    isolated: "#68707e",
-    fallback: "#5c5c72",
-    runtimeLink: "#a8700a",
-  },
-} as const satisfies Record<string, {
-  ground: string;
-  dimNode: string;
-  selected: string;
-  label: string;
-  labelFocused: string;
-  hoverGround: string;
-  isolated: string;
-  fallback: string;
-  /** One hue for every runtime link (ADR-0009): it is a kind, not a cluster. */
-  runtimeLink: string;
-}>;
+// The canvas colours live in the viewer package, so the import graph and the
+// folder map paint a file the same colour. Re-exported for this app's readers.
+export { SCHEMES, discColor, fullValue, mixHex, type ColorScheme } from "reposhape-viewer";
 
 export const RENDER = {
   /**
@@ -170,51 +122,6 @@ export type ImportGraph = Graph<NodeAttributes, EdgeAttributes>;
 export function shortLabel(path: string): string {
   const segments = path.split("/");
   return segments.slice(-2).join("/");
-}
-
-/** Push a hex to full value (brightness 100%): hue and saturation stay, the
- * strongest channel hits 255. Cluster colours arrive muted; at full value
- * they read vivid without collapsing into white. */
-export function fullValue(hex: string): string {
-  let h = hex.startsWith("#") ? hex.slice(1) : hex;
-  if (h.length === 3) h = h.slice(0, 1).repeat(2) + h.slice(1, 2).repeat(2) + h.slice(2, 3).repeat(2);
-  const channels = [
-    parseInt(h.slice(0, 2), 16),
-    parseInt(h.slice(2, 4), 16),
-    parseInt(h.slice(4, 6), 16),
-  ];
-  const peak = Math.max(...channels);
-  if (peak === 0) return hex;
-  const scale = 255 / peak;
-  const out = (n: number) => Math.min(255, Math.round(n * scale)).toString(16).padStart(2, "0");
-  return `#${out(channels[0]!)}${out(channels[1]!)}${out(channels[2]!)}`;
-}
-
-/** Mix a foreground hex toward a ground hex; result is `#rrggbb`. */
-export function mixHex(foreground: string, ground: string, groundFraction: number): string {
-  const channels = (hex: string): [number, number, number] => {
-    let h = hex.startsWith("#") ? hex.slice(1) : hex;
-    if (h.length === 3) h = h.slice(0, 1).repeat(2) + h.slice(1, 2).repeat(2) + h.slice(2, 3).repeat(2);
-    return [
-      parseInt(h.slice(0, 2), 16),
-      parseInt(h.slice(2, 4), 16),
-      parseInt(h.slice(4, 6), 16),
-    ];
-  };
-  const [fr, fg, fb] = channels(foreground);
-  const [gr, gg, gb] = channels(ground);
-  const mix = (f: number, g: number) =>
-    Math.max(0, Math.min(255, Math.round(f + (g - f) * groundFraction)));
-  const hex = (n: number) => n.toString(16).padStart(2, "0");
-  return `#${hex(mix(fr, gr))}${hex(mix(fg, gg))}${hex(mix(fb, gb))}`;
-}
-
-/** A cluster's disc ink on a scheme. Dark lifts the muted palette to full
- * value (hue and saturation stay, so clusters keep their identity, but
- * nothing renders muted); light keeps raw Tableau 10, which was designed on
- * white. */
-export function discColor(clusterHex: string, scheme: ColorScheme): string {
-  return scheme === "dark" ? fullValue(clusterHex) : clusterHex;
 }
 
 /** graphify's inherit-from-source, pre-composited against the scheme's

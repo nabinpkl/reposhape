@@ -1,10 +1,13 @@
-"use client";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
-import { useTheme } from "next-themes";
-import { useCallback, useEffect, useMemo, useRef } from "react";
-
-import { useFilters } from "@/features/filters/filterStore";
-import { SCHEMES, mixHex, type ColorScheme } from "@/features/graph/graphModel";
+import { SCHEMES, mixHex, type ColorScheme } from "./colors";
 import {
   HEAD_LENGTH,
   buildEdgeIndex,
@@ -14,12 +17,13 @@ import {
   type Flow,
   type Focus,
   type Strand,
-} from "@/features/map/mapEdges";
-import { COLLAPSE, MAP_SIZE, packView, type MapCircle, type Sizing } from "@/features/map/mapLayout";
-import type { Shape } from "@/features/map/shape";
+} from "./mapEdges";
+import { COLLAPSE, MAP_SIZE, packView, type MapCircle, type Sizing } from "./mapLayout";
+import { toShape, type FolderData, type Shape } from "./shape";
 
 /**
- * The map's renderer: one 2D canvas, drawn by hand.
+ * The folder map: every file a dot, every folder the circle around its files,
+ * on one 2D canvas drawn by hand.
  *
  * sigma is not used here and the reason is the unit system rather than taste.
  * sigma sizes nodes in SCREEN pixels, which is right for a graph whose discs
@@ -169,13 +173,6 @@ function sunken(ink: string, ground: string): string {
   return mixed;
 }
 
-function domScheme(): ColorScheme {
-  if (typeof document !== "undefined" && document.documentElement.classList.contains("light")) {
-    return "light";
-  }
-  return "dark";
-}
-
 interface Size {
   width: number;
   height: number;
@@ -250,24 +247,70 @@ function circleAt(root: MapCircle, camera: Camera, px: number, py: number): MapC
   return found;
 }
 
-export function MapCanvas({
-  shape,
-  sizing,
-  edges,
-  onOpenFile,
-  onDismiss,
-  onSummary,
-}: {
-  shape: Shape;
-  sizing: Sizing;
-  /** Draw the imports that cross a package boundary. See `mapEdges`. */
-  edges: boolean;
-  onOpenFile: (path: string) => void;
+/** Words the map writes on the canvas. Defaults are neutral; a source with
+ * a vocabulary (imports, calls, references) passes its own. */
+export interface MapLabels {
+  /** A file's location when it sits at the top level. */
+  root?: string;
+  /** The focused circle's outgoing link count, on the links view. */
+  linkOut?: (count: number) => string;
+  /** Its incoming link count. */
+  linkIn?: (count: number) => string;
+}
+
+const DEFAULT_LABELS: Required<MapLabels> = {
+  root: "root",
+  linkOut: (count) => `${count.toLocaleString()} out`,
+  linkIn: (count) => `${count.toLocaleString()} in`,
+};
+
+export interface FolderMapProps {
+  data: FolderData;
+  /** `files`: one dot per file. `size`: a dot's area is its file's size. */
+  sizing?: Sizing;
+  /** Draw `data.links` over the folders, emphasising the ones that leave their package. */
+  links?: boolean;
+  theme?: ColorScheme;
+  /** The selected file's path, drawn in the selection colour. */
+  selected?: string | null;
+  /** A file was clicked (its path), or empty ground was (null). */
+  onSelect?: (path: string | null) => void;
+  /** Files whose path contains this text stay lit; the rest dim. */
+  highlight?: string;
+  /** Files drawn dimmed, whatever else is going on. */
+  dimmed?: ReadonlySet<string>;
+  /** A file was clicked: the reader wants to read it. */
+  onOpenFile?: (path: string) => void;
   /** A click on nothing: the reader is putting the file pane away. */
   onDismiss?: () => void;
-  /** What the edge rule resolved to, so the stats line can say it. */
-  onSummary?: (summary: EdgeSummary | null) => void;
-}) {
+  /** What the package rule resolved to on the links view; null when not drawing links. */
+  onLinkSummary?: (summary: EdgeSummary | null) => void;
+  labels?: MapLabels;
+  className?: string;
+  /** The map fills its box: give it, or its parent, a size. */
+  style?: CSSProperties;
+}
+
+const NO_DIMMED: ReadonlySet<string> = new Set();
+
+export function FolderMap({
+  data,
+  sizing = "files",
+  links = false,
+  theme = "dark",
+  selected = null,
+  onSelect,
+  highlight = "",
+  dimmed = NO_DIMMED,
+  onOpenFile,
+  onDismiss,
+  onLinkSummary,
+  labels,
+  className,
+  style,
+}: FolderMapProps) {
+  const edges = links;
+  const shape = useMemo(() => toShape(data), [data]);
   const container = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const camera = useRef<Camera | null>(null);
@@ -280,13 +323,17 @@ export function MapCanvas({
   const held = useRef<{ x: number; y: number } | null>(null);
   const frame = useRef<number | null>(null);
   const flight = useRef<number | null>(null);
-  const { resolvedTheme } = useTheme();
-  const scheme: ColorScheme =
-    resolvedTheme === "dark" || resolvedTheme === "light" ? resolvedTheme : domScheme();
+  /**
+   * What the props say right now, for code that runs outside a render: a
+   * frame, a pointer handler. Drawing reads this rather than closing over
+   * props, so a selection or a highlight is a repaint, never a new renderer.
+   */
+  const live = useRef({ selected, highlight, dimmed, theme, words: { ...DEFAULT_LABELS, ...labels } });
 
-  // Packed once per view and sizing. A camera move never re-runs this, which is
-  // what makes the drawing the same picture every time it is opened.
-  const layout = useMemo(() => packView(shape, sizing, domScheme()), [shape, sizing]);
+  // Packed once per data, sizing and theme. A camera move never re-runs this,
+  // which is what makes the drawing the same picture every time it is opened.
+  // The theme only changes the inks, never a position (see the camera effect).
+  const layout = useMemo(() => packView(shape, sizing, theme), [shape, sizing, theme]);
   /**
    * The crossing edges, resolved against the packing. Built only for the tab
    * that draws them, because it walks every edge in the view.
@@ -332,9 +379,9 @@ export function MapCanvas({
     const context = element.getContext("2d");
     if (!context) return;
     const active = camera.current ?? (camera.current = fitCamera(box.width, box.height));
-    const colors = SCHEMES[domScheme()];
-    const rings = RINGS[domScheme()];
-    const { focusedPath, search, dimmed } = useFilters.getState();
+    const { selected: focusedPath, highlight: search, dimmed, theme: scheme, words } = live.current;
+    const colors = SCHEMES[scheme];
+    const rings = RINGS[scheme];
     const query = search.trim().toLowerCase();
 
     // Two separate jobs, and conflating them is what smeared the drawing. The
@@ -426,7 +473,7 @@ export function MapCanvas({
       // the cursor is on, so each is by definition touching what is in front
       // of the reader.
       if (focused) {
-        const flows = FLOWS[domScheme()];
+        const flows = FLOWS[scheme];
         context.lineWidth = FOCUS_WIDTH / active.k;
         context.globalAlpha = FOCUS_ALPHA;
         for (const strand of focused.strands) {
@@ -556,18 +603,18 @@ export function MapCanvas({
               x: Math.min(Math.max(cx, 0) + reach, box.width - 8),
               y: Math.min(Math.max(cy, 0) + reach, box.height - 8),
             };
-      drawHoverChip(context, subject, at, colors, rings, box.width, box.height, focused);
+      drawHoverChip(context, subject, at, colors, rings, FLOWS[scheme], words, box.width, box.height, focused);
     }
   }, [edgeIndex, layout]);
 
   useEffect(() => {
-    onSummary?.(
+    onLinkSummary?.(
       edgeIndex ? { packages: edgeIndex.packages, crossing: edgeIndex.crossings } : null,
     );
-    // Cleared on the way out as well, or leaving this tab leaves the stats
+    // Cleared on the way out as well, or leaving this view leaves a stats
     // line describing a rule that is no longer drawing anything.
-    return () => onSummary?.(null);
-  }, [edgeIndex, onSummary]);
+    return () => onLinkSummary?.(null);
+  }, [edgeIndex, onLinkSummary]);
 
   const schedule = useCallback(() => {
     if (frame.current === null) frame.current = requestAnimationFrame(draw);
@@ -597,13 +644,30 @@ export function MapCanvas({
     [draw],
   );
 
-  // Sizing and the view both change the geometry, so the camera goes back to a
-  // fit rather than staying pointed at coordinates that now mean something else.
+  // Data and sizing change the geometry, so the camera goes back to a fit
+  // rather than staying pointed at coordinates that now mean something else.
+  // A theme change re-packs too, for the inks, but lands every circle where it
+  // was, so the camera and the pin stay.
+  const geometry = useRef<{ shape: Shape; sizing: Sizing } | null>(null);
   useEffect(() => {
-    camera.current = null;
-    pinned.current = null;
+    const was = geometry.current;
+    if (!was || was.shape !== shape || was.sizing !== sizing) {
+      camera.current = null;
+      pinned.current = null;
+    }
+    geometry.current = { shape, sizing };
     schedule();
-  }, [layout, schedule]);
+  }, [shape, sizing, schedule]);
+
+  // The props a frame reads. The pin is the links view's focus and `selected`
+  // is the file pane's: a reader clearing one is clearing both, so losing the
+  // selection drops the pin with it. Not the reverse: flying into a folder
+  // pins it and selects no file at all.
+  useEffect(() => {
+    if (live.current.selected !== null && selected === null) pinned.current = null;
+    live.current = { selected, highlight, dimmed, theme, words: { ...DEFAULT_LABELS, ...labels } };
+    schedule();
+  }, [selected, highlight, dimmed, theme, labels, schedule]);
 
   /**
    * Re-resolve what the cursor is over. Called from the pointer AND from the
@@ -698,32 +762,15 @@ export function MapCanvas({
     const cancelGesture = (event: Event) => event.preventDefault();
     element.addEventListener("gesturestart", cancelGesture);
     element.addEventListener("gesturechange", cancelGesture);
-    // The pin is the edge layer's focus and `focusedPath` is the file pane's.
-    // A reader clearing one is clearing both, so losing the selection drops the
-    // pin with it. Not the reverse: flying into a folder pins it and selects no
-    // file at all.
-    let selected = useFilters.getState().focusedPath;
-    const unsubscribe = useFilters.subscribe((state) => {
-      if (selected !== null && state.focusedPath === null) pinned.current = null;
-      selected = state.focusedPath;
-      schedule();
-    });
     return () => {
       observer.disconnect();
       element.removeEventListener("wheel", onWheel);
       element.removeEventListener("gesturestart", cancelGesture);
       element.removeEventListener("gesturechange", cancelGesture);
-      unsubscribe();
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       if (flight.current !== null) cancelAnimationFrame(flight.current);
     };
-  }, [draw, onWheel, schedule]);
-
-  // Repaint on a theme change. The layout is untouched: colours are read live
-  // from the scheme at draw time, so toggling the theme never moves a circle.
-  useEffect(() => {
-    schedule();
-  }, [scheme, schedule]);
+  }, [draw, onWheel]);
 
   const dragging = useRef<{ id: number; x: number; y: number; moved: number } | null>(null);
   // Every pointer currently on the canvas, in client pixels. One entry is a
@@ -748,7 +795,7 @@ export function MapCanvas({
   }, []);
 
   const onPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLCanvasElement>) => {
+    (event: ReactPointerEvent<HTMLCanvasElement>) => {
       if (flight.current !== null) {
         cancelAnimationFrame(flight.current);
         flight.current = null;
@@ -773,7 +820,7 @@ export function MapCanvas({
   );
 
   const onPointerMove = useCallback(
-    (event: React.PointerEvent<HTMLCanvasElement>) => {
+    (event: ReactPointerEvent<HTMLCanvasElement>) => {
       const active = camera.current;
       const box = container.current?.getBoundingClientRect();
       if (!active || !box) return;
@@ -827,7 +874,7 @@ export function MapCanvas({
   }, [schedule]);
 
   const onPointerUp = useCallback(
-    (event: React.PointerEvent<HTMLCanvasElement>) => {
+    (event: ReactPointerEvent<HTMLCanvasElement>) => {
       touches.current.delete(event.pointerId);
       if (pinch.current || suppressTap.current) {
         // The pinch is over once fewer than two fingers remain. A remaining
@@ -866,10 +913,9 @@ export function MapCanvas({
         event.clientY - box.top,
       );
       hover.current = null;
-      const { setFocus } = useFilters.getState();
       if (!target || target.depth === 0) {
         pinned.current = null;
-        setFocus(null);
+        onSelect?.(null);
         onDismiss?.();
         return;
       }
@@ -882,13 +928,13 @@ export function MapCanvas({
       pinned.current = edges ? target : null;
       if (target.isFile) {
         held.current = { x: target.x, y: target.y };
-        setFocus(target.path);
-        onOpenFile(target.path);
+        onSelect?.(target.path);
+        onOpenFile?.(target.path);
         return;
       }
       flyTo(target);
     },
-    [edges, flyTo, layout, onDismiss, onOpenFile],
+    [edges, flyTo, layout, onDismiss, onOpenFile, onSelect],
   );
 
   const onDoubleClick = useCallback(() => {
@@ -900,10 +946,21 @@ export function MapCanvas({
   }, [schedule]);
 
   return (
-    <div ref={container} className="absolute inset-0" style={{ background: SCHEMES[scheme].ground }}>
+    <div
+      ref={container}
+      className={className}
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        overflow: "hidden",
+        background: SCHEMES[theme].ground,
+        ...style,
+      }}
+    >
       <canvas
         ref={canvas}
-        className="block touch-none"
+        style={{ display: "block", touchAction: "none" }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -1035,6 +1092,8 @@ function drawHoverChip(
   at: { x: number; y: number },
   colors: (typeof SCHEMES)[ColorScheme],
   rings: readonly string[],
+  flows: Record<Flow, string>,
+  words: Required<MapLabels>,
   width: number,
   height: number,
   focused: Focus | null,
@@ -1051,18 +1110,17 @@ function drawHoverChip(
 
   const parent = circle.path.slice(0, Math.max(0, circle.path.length - circle.name.length - 1));
   const detail = circle.isFile
-    ? parent || "repo root"
+    ? parent || words.root
     : `${circle.files.toLocaleString()} file${circle.files === 1 ? "" : "s"}`;
   context.font = `400 ${DETAIL}px system-ui, -apple-system, sans-serif`;
   const trimmed = circle.isFile ? fit(context, detail, Math.max(120, width * 0.4)) : detail;
   const detailWidth = context.measureText(trimmed).width;
 
-  const flows = FLOWS[domScheme()];
   const counts = focused
     ? {
-        out: `${focused.outgoing.toLocaleString()} import${focused.outgoing === 1 ? "" : "s"}`,
+        out: words.linkOut(focused.outgoing),
         dot: "  ·  ",
-        in: `${focused.incoming.toLocaleString()} importer${focused.incoming === 1 ? "" : "s"}`,
+        in: words.linkIn(focused.incoming),
       }
     : null;
   const countWidth = counts

@@ -1,19 +1,19 @@
 import { hierarchy, pack } from "d3-hierarchy";
 
-import { SCHEMES, discColor, type ColorScheme } from "@/features/graph/graphModel";
-import type { Shape } from "@/features/map/shape";
+import { SCHEMES, discColor, type ColorScheme } from "./colors";
+import type { Shape } from "./shape";
 
 /**
- * The repo as nested circles: every file one dot, folders the circles around
- * them. No edges, which is the point rather than an omission.
+ * A tree of files as nested circles: every file one dot, folders the circles
+ * around them. No edges, which is the point rather than an omission.
  *
  * The graph canvas draws relations and cannot draw all of them: at 2,581 files
  * its 5,451 curves are what the eye reads first, and the discs stop being
  * individually visible. Drop the edges and every file fits on screen at once.
- * Position then spends itself on the folder tree and colour carries the only
- * import fact left, the Louvain community, which is what makes this a map of
- * the repo rather than a file browser: a folder whose dots are one colour is a
- * place, and one with four colours is a pile.
+ * Position then spends itself on the folder tree and colour carries the
+ * group (for a repo in reposhape, its import community), which is what makes
+ * this a map rather than a file browser: a folder whose dots are one colour is
+ * a place, and one with four colours is a pile.
  *
  * Geometry is computed once per view and never again. Zoom moves the camera
  * over a fixed drawing; it does not re-layout, so the picture is identical

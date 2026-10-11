@@ -22,9 +22,16 @@ gitignored, never here.
   deviation needs a written reason, not a preference.
 - **Absolute imports.** `@/x` is the frontend's own src. No `../..` in either
   tree. A relative import breaks when either end moves.
-- **Generated files are never hand-edited.** `frontend/src/generated/*` comes
-  from Pydantic DTOs via `tools/export_contracts.py`; `just check` fails on a
-  byte difference.
+- **Generated files are never hand-edited.** `frontend/src/generated/*` and
+  `packages/viewer/src/palette.ts` come from the Pydantic models via
+  `tools/export_contracts.py`; `just check` fails on a byte difference.
+- **The folder views are a published package (ADR-0016).** The map, the file
+  pane and the code view live in `packages/viewer` and know nothing of
+  reposhape: no API, no store, no Tailwind, imports between its own files as
+  `./x` in one flat directory. Anything about repos, imports or this app's
+  state belongs in `frontend/src/features/map/`, which adapts to it. The app
+  imports the package's build, so `just build-viewer` (or `just viewer-dev`)
+  after editing it.
 - **Fail loud.** An unresolved import specifier is recorded with its reason and
   surfaced in the UI as a count. It is never silently dropped. An edge that
   quietly does not exist is indistinguishable from a parser that quietly broke,
