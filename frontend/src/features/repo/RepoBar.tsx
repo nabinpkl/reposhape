@@ -2,9 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Columns2, FolderGit2, Loader2, Menu, PanelRight, RefreshCw, Search } from "lucide-react";
+import { Columns2, FolderGit2, Loader2, Menu, PanelRight, RefreshCw } from "lucide-react";
 
-import { useFilters } from "@/features/filters/filterStore";
+import { HighlightSearch } from "@/features/filters/HighlightSearch";
 import { AddRepo } from "@/features/repo/AddRepo";
 import { invalidateAnalysis } from "@/features/repo/analysisCache";
 import { RendererTabs, type Renderer } from "@/features/repo/RendererTabs";
@@ -54,8 +54,6 @@ export function RepoBar({
   onOpenSidebar: () => void;
 }) {
   const queryClient = useQueryClient();
-  const search = useFilters((state) => state.search);
-  const setSearch = useFilters((state) => state.setSearch);
 
   const repos = useQuery({ queryKey: ["repos"], queryFn: api.repos });
   const readOnly = useReadOnly();
@@ -177,16 +175,7 @@ export function RepoBar({
 
         {readOnly ? null : <AddRepo onPick={onPick} />}
 
-        <div className="relative shrink-0">
-          <Search className="pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 text-faint" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Highlight files…"
-            spellCheck={false}
-            className="w-40 rounded border border-line-strong bg-canvas py-1 pr-2 pl-7 text-[12px] text-fg outline-none placeholder:text-faint focus:border-accent md:w-52"
-          />
-        </div>
+        <HighlightSearch />
       </div>
 
       {analyze.error ? (

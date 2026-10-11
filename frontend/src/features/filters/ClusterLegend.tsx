@@ -15,7 +15,14 @@ import type { Cluster } from "@/generated/contracts";
  * marks the ten largest as owning their colour; the rest are collapsed behind a
  * disclosure and share one tone, with the label doing the work instead.
  */
-export function ClusterLegend({ clusters }: { clusters: readonly Cluster[] }) {
+export function ClusterLegend({
+  clusters,
+  noun = "clusters",
+}: {
+  clusters: readonly Cluster[];
+  /** What a row is, for the overflow line: clusters for a repo, kinds for a folder. */
+  noun?: string;
+}) {
   const [showRest, setShowRest] = useState(false);
   const setSearch = useFilters((state) => state.setSearch);
 
@@ -38,7 +45,7 @@ export function ClusterLegend({ clusters }: { clusters: readonly Cluster[] }) {
           >
             <span className="size-2.5 shrink-0 rounded-full bg-faint" />
             <span className="flex-1">
-              {rest.length} smaller clusters, {restFiles.toLocaleString()} files
+              {rest.length} smaller {noun}, {restFiles.toLocaleString()} files
             </span>
             <span className="text-faint">{showRest ? "hide" : "show"}</span>
           </button>

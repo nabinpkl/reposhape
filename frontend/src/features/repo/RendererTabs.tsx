@@ -109,7 +109,7 @@ export function RendererTabs({
 }
 
 /** What the data is, said once for the tabs that draw it. */
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
+export function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div role="group" aria-label={label} className="flex min-w-0 items-center gap-1.5">
       <span className="shrink-0 text-[11px] text-muted">{label}</span>
@@ -123,7 +123,7 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /** One tab. Five copies of the same className block is how they drift apart. */
-function Tab({
+export function Tab<Id extends string>({
   id,
   active,
   onPick,
@@ -131,9 +131,9 @@ function Tab({
   title,
   children,
 }: {
-  id: Renderer;
-  active: Renderer;
-  onPick: (renderer: Renderer) => void;
+  id: Id;
+  active: Id;
+  onPick: (id: Id) => void;
   disabled?: boolean;
   title: string;
   children: React.ReactNode;
