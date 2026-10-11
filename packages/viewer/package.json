@@ -1,6 +1,6 @@
 {
   "name": "reposhape-viewer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Any tree of files as nested circles, with a file pane. React components from reposhape.",
   "license": "MIT",
   "author": "nabinpkl",
