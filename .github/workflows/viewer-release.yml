@@ -1,0 +1,119 @@
+# Publishing reposhape-viewer to npm (ADR-0016).
+#
+# A viewer tag (`viewer-v0.1.0`) publishes packages/viewer to npm through
+# trusted publishing, so no npm token exists anywhere, and npm attaches a
+# provenance attestation naming this repository, this workflow and the commit
+# that built the tarball. A manual run is a dry run: it gates, packs and keeps
+# the tarball, and publishes nothing. Versioned apart from the Python package,
+# whose tags are bare `v*`.
+#
+# Build and publish are separate jobs, as for PyPI: the build runs the
+# project's code and its dependencies' build steps, and only the publish job,
+# which runs nothing but `npm publish` on the tarball the build packed, may
+# request an identity token. That job names the GitHub environment `npm`, which
+# the trusted publisher registered on npmjs.com must match.
+name: viewer-release
+
+on:
+  push:
+    tags:
+      - "viewer-v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+
+      - name: Install Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          # No cache in a job whose output is published: a poisoned cache entry
+          # would end up inside the tarball.
+          package-manager-cache: false
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@11.15.1 --activate
+
+      - name: Install just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: "1.50.0"
+
+      # A tag that disagrees with package.json would publish a version nobody
+      # tagged, and npm never accepts the same version twice.
+      - name: Tag matches the package version
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(node -p 'require("./packages/viewer/package.json").version')
+          if [ "viewer-v$version" != "$TAG" ]; then
+            echo "tag $TAG does not match packages/viewer/package.json version $version" >&2
+            exit 1
+          fi
+
+      # The palette is generated from the backend's models, so the contract
+      # check runs here too: a stale palette.ts would ship.
+      - name: Gate
+        run: just check-contracts check-viewer
+
+      - name: Pack
+        run: cd packages/viewer && npm pack --pack-destination ../../dist-viewer
+
+      - name: Keep the tarball
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: viewer-tarball
+          path: dist-viewer/
+          if-no-files-found: error
+
+  npm:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/reposhape-viewer
+    permissions:
+      id-token: write
+    steps:
+      - name: Install Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      # Trusted publishing needs npm 11.5.1 or later; say so rather than fail
+      # later on an authentication error that does not mention the version.
+      - name: npm is new enough for trusted publishing
+        run: |
+          node -e '
+            const [major, minor, patch] = process.argv[1].split(".").map(Number);
+            if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) {
+              console.error(`npm ${process.argv[1]} cannot use trusted publishing; 11.5.1 or later can`);
+              process.exit(1);
+            }' "$(npm --version)"
+
+      - name: Fetch the tarball
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: viewer-tarball
+          path: dist-viewer/
+
+      - name: Publish to npm
+        run: npm publish --access public dist-viewer/*.tgz
