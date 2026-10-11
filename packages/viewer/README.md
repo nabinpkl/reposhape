@@ -10,6 +10,14 @@ folder flies into it, clicking a file selects it and opens it in the pane, the
 wheel or a pinch zooms, dragging pans, and a double click fits the whole tree
 again. One canvas, drawn by hand: 1,766 files redraw in about a millisecond.
 
+![FolderViewer drawing langchain's 1,766 source files: libs/langchain, core, partners and the rest as nested circles, each file a dot coloured by its import cluster](https://raw.githubusercontent.com/nabinpkl/reposhape/main/packages/viewer/screenshots/folders.jpg)
+
+Every screenshot here is this package drawing
+[langchain-ai/langchain](https://github.com/langchain-ai/langchain) (MIT) at
+commit `c01de7f`: its 1,766 source files with tests left out, each coloured by
+the import cluster [reposhape](https://github.com/nabinpkl/reposhape) found,
+with line counts as sizes and the 3,642 imports between them as links.
+
 ```sh
 npm install reposhape-viewer
 ```
@@ -56,6 +64,10 @@ export function Files() {
 - **folders · links**: `links` drawn over the folders, bundled up the folder
   tree. Links that leave their package are emphasised; hovering a circle shows
   its own links both ways with arrows. Offered when the data has links.
+
+![folders · size: the same tree with each dot's area set by the file's line count, so the anthropic and openrouter partner packages stand out as single large files](https://raw.githubusercontent.com/nabinpkl/reposhape/main/packages/viewer/screenshots/folders-size.jpg)
+
+![folders · links: imports drawn over the folders and bundled into trunks, with the ones leaving their package, such as partners into core, in their cluster's colour](https://raw.githubusercontent.com/nabinpkl/reposhape/main/packages/viewer/screenshots/folders-links.jpg)
 
 ## The data
 
@@ -110,6 +122,8 @@ import { FilePane, FolderMap } from "reposhape-viewer";
 
 `FilePane` takes `children`, rendered between its meta line and the content,
 for rows of your own. `CodeBlock` is the pane's code view on its own.
+
+![FolderMap with langchain_core/messages/ai.py selected, and FilePane beside it showing the file highlighted: 854 lines, 28.5 KB](https://raw.githubusercontent.com/nabinpkl/reposhape/main/packages/viewer/screenshots/file-pane.jpg)
 
 ### File content
 
