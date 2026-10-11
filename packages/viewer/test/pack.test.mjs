@@ -5,9 +5,12 @@ import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 
 test("the tarball holds exactly the build, the readme and the license", () => {
-  const [report] = JSON.parse(
+  const output = JSON.parse(
     execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { encoding: "utf8" }),
   );
+  // npm 11 reports an array of packs, npm 12 an object keyed by package name.
+  // CI's Node ships the first and a current machine the second.
+  const report = Array.isArray(output) ? output[0] : output["reposhape-viewer"];
   assert.deepEqual(report.files.map((file) => file.path).sort(), [
     "LICENSE",
     "README.md",
