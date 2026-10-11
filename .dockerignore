@@ -28,6 +28,8 @@ ops
 # Except graphify's lock, which the image installs from.
 !ops/graphify/requirements.txt
 tools
+# Except the notices script, which the web stage runs after its export.
+!tools/third_party_notices.mjs
 
 # `**/` is load-bearing: `*` does not cross a `/` in these patterns, so a bare
 # `.env` would exclude only the root one.
